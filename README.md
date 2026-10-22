@@ -11,6 +11,7 @@ A simple dashboard for keeping track of the food you have at home.
 - **Recipes from Pinterest / TikTok** – save a recipe's link (it shows an "Open on Pinterest / TikTok" button), paste the caption or recipe text to fill in the ingredients and method automatically, or on Android share a pin or video straight to the installed app (**Share → Dinner**).
 - **Copy for Claude** – in a new recipe, tap **✨ Copy for Claude** to copy a ready-made request (with the link and caption) to paste into the Claude app. Claude writes the recipe in a layout the app understands; paste the reply back and tap **Fill in from text** to fill in the name, difficulty, time, ingredients and method. Free with any Claude account, no API key.
 - **Meal plan tab** – plan breakfast, lunch and dinner for each day of the week (Monday to Sunday) by picking from your saved recipes. Move between weeks, clear a week, and get a shopping list of the ingredients you don't already have, which you can copy.
+- **Households** – tap **🏠 Share with your household** to create a household and send an invite link; everyone who joins shares the same food list, recipes and meal plan, kept in sync between phones (and still working offline). Uses a free Firebase project – see below.
 
 ## Running it
 
@@ -31,3 +32,14 @@ The app is an installable web app (PWA): once installed it opens full screen fro
    - **Android (Chrome):** tap the ⋮ menu, then **Install app** (or **Add to Home screen**).
 
 Data is saved on the device in the browser's local storage, so each phone or computer keeps its own list. Use **Export data** / **Import data** to back it up or move it to another device. Deleting the app from your home screen also deletes its saved data, so export a backup first.
+
+## Setting up household sharing
+
+Household sharing stores data in a Firebase project on Google's free Spark plan. The app works without it; until it's set up, the 🏠 button says sharing isn't switched on.
+
+1. In the [Firebase console](https://console.firebase.google.com), create a project (Google Analytics not needed).
+2. Add a **Web app** and copy its config object into `firebase-config.js` as `window.FIREBASE_CONFIG = { ... }`.
+3. **Build → Authentication → Get started → Anonymous → Enable.**
+4. **Build → Firestore Database → Create database** (production mode, a location near you), then paste the contents of `firestore.rules` into the **Rules** tab and **Publish**.
+
+Each household lives at `households/<code>` with `places`, `items`, `recipes` and `plan` subcollections (one document per entry), so edits from different phones merge instead of overwriting each other. Households can't be listed; the code is the only way in. The Firebase SDK (12.19.0, Apache 2.0) is bundled in `vendor/firebase.mjs`.

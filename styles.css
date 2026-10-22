@@ -350,3 +350,31 @@ dialog { max-height: calc(100dvh - 32px); }
   font-size: 0.9rem;
   z-index: 10;
 }
+
+/* Household */
+.household-chip {
+  font: inherit;
+  font-size: 0.85rem;
+  margin-top: 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.household-chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.household-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+#household-dialog hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+#household-dialog .dialog-actions { margin-bottom: 12px; }

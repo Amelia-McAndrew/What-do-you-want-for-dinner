@@ -40,6 +40,7 @@
 
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
+    pushToHousehold();
   }
 
   function uid() {
@@ -827,8 +828,317 @@ Method:
     }
   });
 
+  // ---------- Household sharing ----------
+  //
+  // Each household is households/<code> in Firestore, with one document per place, item,
+  // recipe and planned day in the subcollections below. The phone keeps working from its own
+  // copy; save() sends only what changed, and changes from other phones arrive as snapshots.
+
+  const HOUSEHOLD_KEY = 'wdywfd-household';
+  const COLLECTIONS = ['places', 'items', 'recipes', 'plan'];
+  const CODE_WORDS = ['APPLE', 'BASIL', 'BEAN', 'BERRY', 'BREAD', 'BROTH', 'BUTTER', 'CAKE', 'CARROT', 'CELERY',
+    'CHEESE', 'CHERRY', 'CHILLI', 'CLOVE', 'COCOA', 'COCONUT', 'CORN', 'CREAM', 'CRUMB', 'CURRY', 'DATE', 'DILL',
+    'DUMPLING', 'FENNEL', 'FUDGE', 'GARLIC', 'GINGER', 'GRAPE', 'GRAVY', 'HAZEL', 'HONEY', 'JAM', 'KALE', 'KIWI',
+    'LEEK', 'LEMON', 'LENTIL', 'LIME', 'MANGO', 'MAPLE', 'MELON', 'MINT', 'MUFFIN', 'NOODLE', 'NUTMEG', 'OLIVE',
+    'ONION', 'ORANGE', 'PANCAKE', 'PAPRIKA', 'PASTA', 'PEACH', 'PEAR', 'PECAN', 'PEPPER', 'PICKLE', 'PLUM', 'POTATO',
+    'PRAWN', 'PUMPKIN', 'RADISH', 'RAISIN', 'RHUBARB', 'RICE', 'SAFFRON', 'SAGE', 'SALSA', 'SCONE', 'SESAME', 'SPROUT',
+    'SQUASH', 'SUGAR', 'SWEDE', 'TOAST', 'TOFFEE', 'TOMATO', 'TRUFFLE', 'TURNIP', 'VANILLA', 'WAFFLE', 'WALNUT',
+    'YOGURT', 'ACORN', 'BADGER', 'BIRCH', 'BRAMBLE', 'CEDAR', 'CLOVER', 'COMET', 'CORAL', 'DAISY', 'EMBER', 'FERN',
+    'FINCH', 'FOX', 'GLADE', 'HARBOUR', 'HERON', 'HOLLY', 'IVY', 'JUNIPER', 'LARK', 'MAGPIE', 'MEADOW', 'MOSS',
+    'OTTER', 'PEBBLE', 'PINE', 'POPPY', 'QUAIL', 'RAVEN', 'RIVER', 'ROBIN', 'ROWAN', 'SPARROW', 'STONE', 'THISTLE',
+    'TIGER', 'TULIP', 'WILLOW', 'WREN', 'BEACON', 'CANDLE', 'HARP', 'LANTERN', 'MARBLE', 'ORBIT', 'QUILL', 'VELVET'];
+
+  let household = null;       // { code } while sharing
+  let fb = null;              // { mod, db, auth } once Firebase has loaded
+  let unsubscribers = [];
+  let ready = new Set();      // collections that have had their first snapshot
+  let synced = {};            // collection -> { id: JSON of the last version seen in Firestore }
+
+  try { household = JSON.parse(localStorage.getItem(HOUSEHOLD_KEY) || 'null'); } catch (e) { household = null; }
+
+  // Stable JSON so the same object always compares equal, whatever order Firestore returns fields in.
+  function stable(value) {
+    if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().filter((k) => value[k] !== undefined)
+        .map((k) => `${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}`;
+    }
+    return JSON.stringify(value === undefined ? null : value);
+  }
+
+  // Local data -> { docId: fields } for one collection.
+  function localDocs(name) {
+    const docs = {};
+    if (name === 'plan') {
+      for (const [date, day] of Object.entries(data.plan)) docs[date] = { ...day };
+    } else {
+      data[name].forEach((entry, pos) => {
+        docs[entry.id] = name === 'places' ? { ...entry, pos } : { ...entry };
+      });
+    }
+    return docs;
+  }
+
+  // Firestore documents -> local data for one collection.
+  function applyDocs(name, docs) {
+    if (name === 'plan') {
+      data.plan = docs;
+    } else if (name === 'places') {
+      data.places = Object.values(docs).sort((a, b) => (a.pos ?? 0) - (b.pos ?? 0))
+        .map(({ pos, ...place }) => place);
+    } else {
+      data[name] = Object.values(docs);
+    }
+  }
+
+  function pushToHousehold() {
+    if (!household || !fb || ready.size < COLLECTIONS.length) return;
+    const { mod, db } = fb;
+    const writes = [];
+    for (const name of COLLECTIONS) {
+      const docs = localDocs(name);
+      const known = synced[name] || {};
+      for (const [id, fields] of Object.entries(docs)) {
+        const json = stable(fields);
+        if (known[id] !== json) writes.push(['set', name, id, fields, json]);
+      }
+      for (const id of Object.keys(known)) {
+        if (!(id in docs)) writes.push(['delete', name, id]);
+      }
+    }
+    // Firestore batches take up to 500 writes.
+    for (let i = 0; i < writes.length; i += 450) {
+      const batch = mod.writeBatch(db);
+      for (const [op, name, id, fields, json] of writes.slice(i, i + 450)) {
+        const ref = mod.doc(db, 'households', household.code, name, id);
+        synced[name] = synced[name] || {};
+        if (op === 'set') { batch.set(ref, fields); synced[name][id] = json; }
+        else { batch.delete(ref); delete synced[name][id]; }
+      }
+      batch.commit().catch(() => setHouseholdChip('Couldn’t sync your last change'));
+    }
+  }
+
+  async function loadFirebase() {
+    if (fb) return fb;
+    if (!window.FIREBASE_CONFIG) throw new Error('not-configured');
+    const mod = await import('./vendor/firebase.mjs');
+    const app = mod.initializeApp(window.FIREBASE_CONFIG);
+    const db = mod.initializeFirestore(app, {
+      localCache: mod.persistentLocalCache({ tabManager: mod.persistentMultipleTabManager() }),
+    });
+    const auth = mod.getAuth(app);
+    if (window.FIREBASE_CONFIG.useEmulator) {
+      // Only for testing on a computer with the Firebase emulators running.
+      mod.connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      mod.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    }
+    fb = { mod, db, auth };
+    return fb;
+  }
+
+  // Signs this phone in anonymously (no account needed); remembered after the first time.
+  async function ensureSignedIn() {
+    const { mod, auth } = await loadFirebase();
+    await auth.authStateReady();
+    if (!auth.currentUser) await mod.signInAnonymously(auth);
+  }
+
+  function setHouseholdChip(state) {
+    const chip = $('#household-btn');
+    chip.classList.toggle('on', !!household);
+    chip.textContent = household ? `🏠 Shared with your household${state ? ` · ${state}` : ''}` : '🏠 Share with your household';
+    $('#saved-where').textContent = household
+      ? 'Shared with your household, and saved on this device for when you’re offline.'
+      : 'Everything is saved on this device.';
+  }
+
+  function stopListening() {
+    unsubscribers.forEach((stop) => stop());
+    unsubscribers = [];
+    ready = new Set();
+  }
+
+  function startListening() {
+    const { mod, db } = fb;
+    stopListening();
+    for (const name of COLLECTIONS) {
+      const ref = mod.collection(db, 'households', household.code, name);
+      unsubscribers.push(mod.onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
+        const docs = {};
+        const seen = {};
+        snap.forEach((d) => { docs[d.id] = d.data(); seen[d.id] = stable(d.data()); });
+        synced[name] = seen;
+        applyDocs(name, docs);
+        ready.add(name);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
+        render();
+        setHouseholdChip(snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'waiting for signal' : 'up to date');
+      }, () => setHouseholdChip('can’t reach the household')));
+    }
+  }
+
+  async function connectHousehold() {
+    if (!household) return;
+    setHouseholdChip('connecting');
+    try {
+      await loadFirebase();
+      ensureSignedIn().catch(() => setHouseholdChip('waiting for signal'));
+      startListening();
+    } catch (e) {
+      setHouseholdChip(e.message === 'not-configured' ? 'not set up' : 'waiting for signal');
+    }
+  }
+
+  function newCode() {
+    const words = [];
+    const random = new Uint32Array(5);
+    crypto.getRandomValues(random);
+    for (let i = 0; i < 4; i++) words.push(CODE_WORDS[random[i] % CODE_WORDS.length]);
+    return `${words.join('-')}-${10 + (random[4] % 90)}`;
+  }
+
+  function normaliseCode(text) {
+    return text.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  function setHouseholdStatus(text, isError) {
+    const box = $('#household-status');
+    box.textContent = text;
+    box.className = `ai-status ${isError ? 'error' : ''}`;
+    box.hidden = !text;
+  }
+
+  function showHouseholdDialog(prefillCode) {
+    const configured = !!window.FIREBASE_CONFIG;
+    $('#household-off').hidden = configured;
+    $('#household-none').hidden = !configured || !!household;
+    $('#household-in').hidden = !configured || !household;
+    if (household) $('#household-code-show').textContent = household.code;
+    $('#household-code').value = prefillCode || '';
+    setHouseholdStatus('');
+    const dialog = $('#household-dialog');
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function rememberHousehold(code) {
+    household = { code };
+    try { localStorage.setItem(HOUSEHOLD_KEY, JSON.stringify(household)); } catch (e) { /* storage unavailable */ }
+  }
+
+  $('#household-btn').addEventListener('click', () => showHouseholdDialog());
+
+  $('#household-create').addEventListener('click', async () => {
+    setHouseholdStatus('Creating your household…');
+    try {
+      await ensureSignedIn();
+      const { mod, db } = fb;
+      let code = newCode();
+      while ((await mod.getDoc(mod.doc(db, 'households', code))).exists()) code = newCode();
+      await mod.setDoc(mod.doc(db, 'households', code), { created: mod.serverTimestamp() });
+      rememberHousehold(code);
+      // Upload what's on this phone first, so the household starts with it.
+      synced = {};
+      COLLECTIONS.forEach((name) => ready.add(name));
+      pushToHousehold();
+      startListening();
+      setHouseholdChip('up to date');
+      showHouseholdDialog();
+      setHouseholdStatus('Household created. Send the invite link to everyone you live with.');
+    } catch (e) {
+      setHouseholdStatus('Couldn’t create the household. Check you have signal and try again.', true);
+    }
+  });
+
+  $('#household-join').addEventListener('click', async () => {
+    const code = normaliseCode($('#household-code').value);
+    if (code.length < 16) {
+      setHouseholdStatus('Type the whole code, like PLUM-TIGER-RIVER-MANGO-42.', true);
+      return;
+    }
+    setHouseholdStatus('Checking the code…');
+    try {
+      await ensureSignedIn();
+      const { mod, db } = fb;
+      if (!(await mod.getDoc(mod.doc(db, 'households', code))).exists()) {
+        setHouseholdStatus('There’s no household with that code. Check it and try again.', true);
+        return;
+      }
+      if (!confirm('Joining replaces the food, recipes and meal plan on this phone with the household’s. Join?')) {
+        setHouseholdStatus('');
+        return;
+      }
+      rememberHousehold(code);
+      synced = {};
+      startListening();
+      showHouseholdDialog();
+      setHouseholdStatus('You’ve joined. Everything you change now is shared.');
+    } catch (e) {
+      setHouseholdStatus('Couldn’t join. Check you have signal and try again.', true);
+    }
+  });
+
+  function inviteLink() {
+    return `${location.origin}${location.pathname}#join=${household.code}`;
+  }
+
+  $('#household-invite').addEventListener('click', async () => {
+    const text = `Join our household on What do you want for dinner? Open this link, or tap 🏠 and enter the code ${household.code}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'What do you want for dinner?', text, url: inviteLink() }); return; }
+      await navigator.clipboard.writeText(`${text}
+${inviteLink()}`);
+      setHouseholdStatus('Invite link copied. Paste it into a message.');
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      prompt('Copy this invite link:', inviteLink());
+    }
+  });
+
+  $('#household-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(household.code);
+      setHouseholdStatus('Code copied.');
+    } catch (e) {
+      prompt('Copy this code:', household.code);
+    }
+  });
+
+  $('#household-leave').addEventListener('click', () => {
+    if (!confirm('Stop sharing on this phone? It keeps a copy of everything as it is now, and the others keep the household.')) return;
+    stopListening();
+    household = null;
+    synced = {};
+    try { localStorage.removeItem(HOUSEHOLD_KEY); } catch (e) { /* storage unavailable */ }
+    setHouseholdChip();
+    showHouseholdDialog();
+  });
+
+  // Opened from an invite link: #join=CODE
+  function handleInvite() {
+    const match = location.hash.match(/^#join=([A-Za-z0-9-]+)$/);
+    if (!match) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    const code = normaliseCode(match[1]);
+    if (household && household.code === code) return;
+    if (household) {
+      showHouseholdDialog();
+      setHouseholdStatus(`To join ${code}, leave this household first.`, true);
+      return;
+    }
+    showHouseholdDialog(code);
+  }
+
+  window.addEventListener('hashchange', handleInvite);
+  window.addEventListener('online', () => {
+    if (household && fb) ensureSignedIn().catch(() => {});
+  });
+
   render();
+  setHouseholdChip();
+  connectHousehold();
   handleShare();
+  handleInvite();
 
   // Offline support and asking the browser not to clear our saved data.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

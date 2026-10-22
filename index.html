@@ -12,13 +12,14 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <header class="site-header">
     <div class="wrap">
       <h1>What do you want for dinner?</h1>
       <p class="tagline">Keep track of what's in the fridge, freezer and cupboard, and what to use first.</p>
+      <button type="button" class="household-chip" id="household-btn">🏠 Share with your household</button>
       <nav class="tabs" role="tablist" aria-label="Sections">
         <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="true">My food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
@@ -114,7 +115,7 @@
     <footer class="data-tools">
       <button type="button" id="export-btn" class="btn btn-small">Export data</button>
       <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
-      <span class="muted">Everything is saved on this device.</span>
+      <span class="muted" id="saved-where">Everything is saved on this device.</span>
     </footer>
   </main>
 
@@ -214,6 +215,44 @@
     </form>
   </dialog>
 
+  <!-- Household dialog -->
+  <dialog id="household-dialog">
+    <form id="household-form" method="dialog">
+      <h2>Household</h2>
+      <div id="household-off" hidden>
+        <p>Household sharing isn't switched on for this app yet.</p>
+      </div>
+      <div id="household-none" hidden>
+        <p>Share your food list, recipes and meal plan with everyone you live with. Changes on one phone show up on the others.</p>
+        <button type="button" class="btn btn-primary" id="household-create">Create a household</button>
+        <p class="muted">Your current food, recipes and meal plan become the household's starting list.</p>
+        <hr>
+        <label>Join a household
+          <span class="input-with-btn">
+            <input type="text" id="household-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. PLUM-TIGER-RIVER-MANGO-42">
+            <button type="button" class="btn" id="household-join">Join</button>
+          </span>
+        </label>
+        <p class="muted">Joining replaces what's on this phone with the household's list.</p>
+      </div>
+      <div id="household-in" hidden>
+        <p>This phone is sharing with your household. Give the others this code, or send them the invite link.</p>
+        <p class="household-code" id="household-code-show"></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-primary" id="household-invite">Send invite link</button>
+          <button type="button" class="btn" id="household-copy">Copy code</button>
+        </div>
+        <p class="muted">Anyone with the code can see and change your household's lists, so only share it with people you live with.</p>
+        <button type="button" class="btn btn-danger btn-small" id="household-leave">Leave household</button>
+      </div>
+      <p id="household-status" class="ai-status" role="status" hidden></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Place dialog -->
   <dialog id="place-dialog">
     <form id="place-form" method="dialog">
@@ -243,6 +282,7 @@
       box.hidden = false;
     });
   </script>
-  <script src="app.js?v=7"></script>
+  <script src="firebase-config.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
