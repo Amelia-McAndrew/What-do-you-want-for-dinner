@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What do you want for dinner?</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>What do you want for dinner?</h1>
+      <p class="tagline">Keep track of what's in the fridge, freezer and cupboard, and what to use first.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Summary tiles -->
+    <section class="stats" aria-label="Summary">
+      <div class="stat"><span class="stat-value" id="stat-total">0</span><span class="stat-label">Items</span></div>
+      <div class="stat stat-warn"><span class="stat-value" id="stat-soon">0</span><span class="stat-label">Going off in 3 days</span></div>
+      <div class="stat stat-bad"><span class="stat-value" id="stat-expired">0</span><span class="stat-label">Gone off</span></div>
+      <div class="stat stat-low"><span class="stat-value" id="stat-low">0</span><span class="stat-label">Running low</span></div>
+    </section>
+
+    <!-- Use these first -->
+    <section class="panel" id="use-first-panel">
+      <h2>Use these first</h2>
+      <ul id="use-first" class="use-first"></ul>
+      <p id="use-first-empty" class="muted">Nothing going off soon. 🎉</p>
+    </section>
+
+    <!-- Toolbar -->
+    <section class="toolbar">
+      <div class="toolbar-group">
+        <input type="search" id="search" placeholder="Search food…" aria-label="Search food">
+        <select id="sort" aria-label="Sort items">
+          <option value="expiry">Sort: going off soonest</option>
+          <option value="name">Sort: name A–Z</option>
+          <option value="left">Sort: least left</option>
+        </select>
+      </div>
+      <div class="toolbar-group">
+        <button type="button" id="add-place-btn" class="btn">+ Storage place</button>
+        <button type="button" id="add-item-btn" class="btn btn-primary">+ Add food</button>
+      </div>
+    </section>
+
+    <!-- Storage places -->
+    <section id="places" class="places"></section>
+    <p id="places-empty" class="muted center" hidden>No storage places yet. Add one to get started.</p>
+
+    <footer class="data-tools">
+      <button type="button" id="export-btn" class="btn btn-small">Export data</button>
+      <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
+      <span class="muted">Your data is saved in this browser.</span>
+    </footer>
+  </main>
+
+  <!-- Item dialog -->
+  <dialog id="item-dialog">
+    <form id="item-form" method="dialog">
+      <h2 id="item-dialog-title">Add food</h2>
+      <input type="hidden" id="item-id">
+      <label>Food
+        <input type="text" id="item-name" required placeholder="e.g. Chicken thighs">
+      </label>
+      <label>Storage place
+        <select id="item-place" required></select>
+      </label>
+      <label>Goes off on
+        <input type="date" id="item-expiry">
+      </label>
+      <div class="row">
+        <label>Amount left
+          <input type="number" id="item-qty" min="0" step="any" value="1">
+        </label>
+        <label>Unit
+          <input type="text" id="item-unit" list="unit-options" placeholder="e.g. g, packs">
+        </label>
+      </div>
+      <label>Full amount <span class="muted">(optional – shows how much is left)</span>
+        <input type="number" id="item-full" min="0" step="any" placeholder="e.g. 500">
+      </label>
+      <label>Notes
+        <input type="text" id="item-notes" placeholder="Optional">
+      </label>
+      <datalist id="unit-options">
+        <option value="items"><option value="g"><option value="kg"><option value="ml"><option value="L">
+        <option value="packs"><option value="tins"><option value="jars"><option value="portions">
+      </datalist>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="item-delete">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Place dialog -->
+  <dialog id="place-dialog">
+    <form id="place-form" method="dialog">
+      <h2 id="place-dialog-title">Add storage place</h2>
+      <input type="hidden" id="place-id">
+      <label>Name
+        <input type="text" id="place-name" required placeholder="e.g. Garage freezer">
+      </label>
+      <label>Icon
+        <input type="text" id="place-icon" maxlength="4" placeholder="e.g. 🧊">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="place-delete">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
