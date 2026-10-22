@@ -284,3 +284,37 @@ dialog { max-height: calc(100dvh - 32px); }
 .ingredients li.have.off .mark { color: var(--bad); }
 .method { white-space: pre-wrap; margin: 8px 0 0; overflow-wrap: anywhere; }
 .recipe h4 { margin: 10px 0 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+
+/* Meal plan */
+.week-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.week-nav h2 { margin: 0; font-size: 1.15rem; min-width: 0; }
+.week {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.day {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.day.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.day-head { display: flex; align-items: baseline; gap: 8px; }
+.day-head h3 { margin: 0; font-size: 1rem; }
+.day-head .muted { font-size: 0.85rem; }
+.today-tag { margin-left: auto; font-size: 0.75rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+.slot { display: flex; flex-direction: column; gap: 4px; }
+.slot label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.slot select.empty { color: var(--muted); }
+.slot-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.shopping { margin-bottom: 0; }
+.shopping-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.shopping-head h2 { margin: 0; flex: 1; }
+.shopping-list { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.shopping-list .for { color: var(--muted); font-size: 0.85rem; }

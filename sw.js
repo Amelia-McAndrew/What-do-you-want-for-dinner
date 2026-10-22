@@ -1,5 +1,5 @@
 // Caches the app so it opens without a connection. Bump CACHE when files change.
-const CACHE = 'dinner-v2';
+const CACHE = 'dinner-v3';
 const FILES = [
   './',
   'index.html',

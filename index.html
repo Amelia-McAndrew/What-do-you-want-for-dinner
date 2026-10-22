@@ -22,6 +22,7 @@
       <nav class="tabs" role="tablist" aria-label="Sections">
         <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="true">My food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
+        <button type="button" role="tab" class="tab" id="tab-plan" aria-controls="plan-view" aria-selected="false">Meal plan</button>
       </nav>
     </div>
   </header>
@@ -89,10 +90,31 @@
       <p id="recipes-empty" class="muted center" hidden>No recipes yet. Add your favourite dinners and see which ones you can make with what you have.</p>
     </div>
 
+    <div id="plan-view" role="tabpanel" aria-labelledby="tab-plan" hidden>
+      <section class="week-nav">
+        <button type="button" class="btn btn-icon" id="week-prev" aria-label="Previous week">‹</button>
+        <h2 id="week-label">This week</h2>
+        <button type="button" class="btn btn-icon" id="week-next" aria-label="Next week">›</button>
+        <button type="button" class="btn btn-small" id="week-today">This week</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-small btn-danger" id="week-clear">Clear week</button>
+      </section>
+      <p id="plan-no-recipes" class="muted" hidden>Add some recipes in the Recipes tab, then pick them here for each day.</p>
+      <section id="week" class="week"></section>
+      <section class="panel shopping">
+        <div class="shopping-head">
+          <h2>Shopping list for this week</h2>
+          <button type="button" class="btn btn-small" id="copy-shopping">Copy list</button>
+        </div>
+        <ul id="shopping" class="shopping-list"></ul>
+        <p id="shopping-empty" class="muted"></p>
+      </section>
+    </div>
+
     <footer class="data-tools">
       <button type="button" id="export-btn" class="btn btn-small">Export data</button>
       <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
-      <span class="muted">Your food and recipes are saved on this device.</span>
+      <span class="muted">Everything is saved on this device.</span>
     </footer>
   </main>
 

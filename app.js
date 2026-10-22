@@ -13,7 +13,9 @@
     ],
     items: [],
     recipes: [],
+    plan: {},
   };
+  const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner']];
   const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
   const TAB_KEY = 'wdywfd-tab';
 
@@ -28,6 +30,7 @@
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.places) && Array.isArray(parsed.items)) {
           if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
+          if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
           return parsed;
         }
       }
@@ -130,6 +133,7 @@
     renderUseFirst();
     renderPlaces();
     renderRecipes();
+    renderPlan();
   }
 
   function renderStats() {
@@ -337,6 +341,7 @@
     else data.recipes.push({ id: uid(), ...fields });
     save();
     renderRecipes();
+    renderPlan();
   });
 
   $('#recipe-delete').addEventListener('click', () => {
@@ -344,8 +349,12 @@
     const recipe = data.recipes.find((r) => r.id === id);
     if (recipe && confirm(`Delete the ${recipe.name} recipe?`)) {
       data.recipes = data.recipes.filter((r) => r.id !== id);
+      for (const day of Object.values(data.plan)) {
+        for (const meal of Object.keys(day)) if (day[meal] === id) delete day[meal];
+      }
       save();
       renderRecipes();
+      renderPlan();
       recipeDialog.close();
     }
   });
@@ -355,20 +364,161 @@
   $('#recipe-difficulty').addEventListener('change', renderRecipes);
   $('#recipe-sort').addEventListener('change', renderRecipes);
 
+  // ---------- Meal plan ----------
+
+  function isoDate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function mondayOf(d) {
+    const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+    return m;
+  }
+
+  let weekStart = mondayOf(new Date());
+
+  function weekDays() {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }
+
+  function weekLabel() {
+    const days = weekDays();
+    const thisWeek = isoDate(weekStart) === isoDate(mondayOf(new Date()));
+    const fmt = (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    const range = `${fmt(days[0])} – ${fmt(days[6])}`;
+    return thisWeek ? `This week · ${range}` : `Week of ${range}`;
+  }
+
+  function plannedRecipes() {
+    const list = [];
+    for (const d of weekDays()) {
+      const day = data.plan[isoDate(d)] || {};
+      for (const [meal] of MEALS) {
+        const recipe = data.recipes.find((r) => r.id === day[meal]);
+        if (recipe) list.push(recipe);
+      }
+    }
+    return list;
+  }
+
+  function setMeal(date, meal, recipeId) {
+    const day = data.plan[date] || (data.plan[date] = {});
+    if (recipeId) day[meal] = recipeId;
+    else delete day[meal];
+    if (!Object.keys(day).length) delete data.plan[date];
+    save();
+    renderPlan();
+  }
+
+  function renderPlan() {
+    $('#week-label').textContent = weekLabel();
+    $('#plan-no-recipes').hidden = data.recipes.length > 0;
+    const todayIso = isoDate(new Date());
+    const recipes = [...data.recipes].sort((a, b) => a.name.localeCompare(b.name));
+    const container = $('#week');
+    container.replaceChildren();
+
+    for (const d of weekDays()) {
+      const date = isoDate(d);
+      const day = data.plan[date] || {};
+      const slots = MEALS.map(([meal, label]) => {
+        const id = `plan-${date}-${meal}`;
+        const chosen = recipes.find((r) => r.id === day[meal]);
+        const select = el('select', { id, class: chosen ? '' : 'empty', onchange: (e) => setMeal(date, meal, e.target.value) },
+          el('option', { value: '' }, recipes.length ? 'Choose a meal…' : 'No recipes saved'),
+          recipes.map((r) => el('option', { value: r.id }, r.name)));
+        select.value = chosen ? chosen.id : '';
+        let meta = null;
+        if (chosen) {
+          const stock = recipeStock(chosen);
+          meta = el('div', { class: 'slot-meta' },
+            el('span', { class: `badge ${chosen.difficulty}` }, DIFFICULTY[chosen.difficulty]),
+            chosen.time ? el('span', { class: 'badge' }, `⏱ ${timeText(chosen.time)}`) : null,
+            stock.total ? el('span', { class: `badge ${stock.have === stock.total ? 'have-all' : ''}` }, `${stock.have}/${stock.total} in stock`) : null);
+        }
+        return el('div', { class: 'slot' }, el('label', { for: id }, label), select, meta);
+      });
+
+      container.append(el('article', { class: `day ${date === todayIso ? 'today' : ''}` },
+        el('div', { class: 'day-head' },
+          el('h3', {}, d.toLocaleDateString(undefined, { weekday: 'long' })),
+          el('span', { class: 'muted' }, d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })),
+          date === todayIso ? el('span', { class: 'today-tag' }, 'Today') : null),
+        slots));
+    }
+    renderShopping();
+  }
+
+  // Ingredients for this week's meals that aren't in stock, merged by line.
+  function shoppingList() {
+    const needed = new Map();
+    for (const recipe of plannedRecipes()) {
+      for (const line of recipe.ingredients) {
+        if (stockFor(line)) continue;
+        const key = line.toLowerCase();
+        if (!needed.has(key)) needed.set(key, { line, recipes: new Set() });
+        needed.get(key).recipes.add(recipe.name);
+      }
+    }
+    return [...needed.values()];
+  }
+
+  function renderShopping() {
+    const list = shoppingList();
+    const planned = plannedRecipes().length;
+    $('#shopping').replaceChildren(...list.map(({ line, recipes }) =>
+      el('li', {}, line, el('span', { class: 'for' }, ` · for ${[...recipes].join(', ')}`))));
+    $('#shopping-empty').hidden = list.length > 0;
+    $('#shopping-empty').textContent = planned
+      ? 'You already have everything for this week’s meals.'
+      : 'Pick some meals above and anything you don’t have in stock will be listed here.';
+    $('#copy-shopping').hidden = list.length === 0;
+  }
+
+  $('#copy-shopping').addEventListener('click', async () => {
+    const text = shoppingList().map(({ line }) => `- ${line}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      $('#copy-shopping').textContent = 'Copied';
+      setTimeout(() => { $('#copy-shopping').textContent = 'Copy list'; }, 1500);
+    } catch (e) {
+      prompt('Copy your shopping list:', text);
+    }
+  });
+
+  const moveWeek = (days) => { weekStart.setDate(weekStart.getDate() + days); renderPlan(); };
+  $('#week-prev').addEventListener('click', () => moveWeek(-7));
+  $('#week-next').addEventListener('click', () => moveWeek(7));
+  $('#week-today').addEventListener('click', () => { weekStart = mondayOf(new Date()); renderPlan(); });
+  $('#week-clear').addEventListener('click', () => {
+    if (!plannedRecipes().length || !confirm('Remove all meals planned for this week?')) return;
+    for (const d of weekDays()) delete data.plan[isoDate(d)];
+    save();
+    renderPlan();
+  });
+
   // ---------- Tabs ----------
 
+  const TABS = ['food', 'recipes', 'plan'];
+
   function showTab(name) {
-    const recipes = name === 'recipes';
-    $('#tab-food').setAttribute('aria-selected', String(!recipes));
-    $('#tab-recipes').setAttribute('aria-selected', String(recipes));
-    $('#food-view').hidden = recipes;
-    $('#recipes-view').hidden = !recipes;
+    for (const tab of TABS) {
+      $(`#tab-${tab}`).setAttribute('aria-selected', String(tab === name));
+      $(`#${tab}-view`).hidden = tab !== name;
+    }
     try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* storage unavailable */ }
   }
 
-  $('#tab-food').addEventListener('click', () => showTab('food'));
-  $('#tab-recipes').addEventListener('click', () => showTab('recipes'));
-  try { if (localStorage.getItem(TAB_KEY) === 'recipes') showTab('recipes'); } catch (e) { /* storage unavailable */ }
+  for (const tab of TABS) $(`#tab-${tab}`).addEventListener('click', () => showTab(tab));
+  try {
+    const saved = localStorage.getItem(TAB_KEY);
+    if (TABS.includes(saved)) showTab(saved);
+  } catch (e) { /* storage unavailable */ }
 
   // ---------- Actions ----------
 
@@ -500,7 +650,8 @@
       const parsed = JSON.parse(await file.text());
       if (!Array.isArray(parsed.places) || !Array.isArray(parsed.items)) throw new Error('bad shape');
       if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
-      if (!confirm('Replace your current food list and recipes with the imported ones?')) return;
+      if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
+      if (!confirm('Replace your current food list, recipes and meal plan with the imported ones?')) return;
       data = parsed;
       save();
       render();
