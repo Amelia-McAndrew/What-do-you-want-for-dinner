@@ -138,6 +138,7 @@
     renderRecipes();
     renderPlan();
     renderProfileButton();
+    renderHousehold();
   }
 
   function renderStats() {
@@ -675,13 +676,14 @@ Method:
 
   // ---------- Tabs ----------
 
-  const TABS = ['food', 'recipes', 'plan'];
+  const TABS = ['food', 'recipes', 'plan', 'home'];
 
   function showTab(name) {
     for (const tab of TABS) {
       $(`#tab-${tab}`).setAttribute('aria-selected', String(tab === name));
       $(`#${tab}-view`).hidden = tab !== name;
     }
+    if (name === 'home') renderHousehold();
     try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* storage unavailable */ }
   }
 
@@ -1153,7 +1155,11 @@ Method:
     if (!auth.currentUser) await mod.signInAnonymously(auth);
   }
 
+  let householdState = '';
+
   function setHouseholdChip(state) {
+    householdState = household ? (state || householdState) : '';
+    if (!$('#home-view').hidden) renderHousehold();
     const chip = $('#household-btn');
     chip.classList.toggle('on', !!household);
     chip.textContent = household ? `🏠 Shared with your household${state ? ` · ${state}` : ''}` : '🏠 Share with your household';
@@ -1300,37 +1306,107 @@ Method:
     return `${location.origin}${location.pathname}#join=${household.code}`;
   }
 
-  $('#household-invite').addEventListener('click', async () => {
+  // These are used by both the household dialog and the Household tab; `say` shows a message
+  // in whichever one the button was in.
+  async function sendInvite(say) {
     const text = `Join our household on What do you want for dinner? Open this link, or tap 🏠 and enter the code ${household.code}`;
     try {
       if (navigator.share) { await navigator.share({ title: 'What do you want for dinner?', text, url: inviteLink() }); return; }
-      await navigator.clipboard.writeText(`${text}
-${inviteLink()}`);
-      setHouseholdStatus('Invite link copied. Paste it into a message.');
+      await navigator.clipboard.writeText(`${text}\n${inviteLink()}`);
+      say('Invite link copied. Paste it into a message.');
     } catch (e) {
       if (e && e.name === 'AbortError') return;
       prompt('Copy this invite link:', inviteLink());
     }
-  });
+  }
 
-  $('#household-copy').addEventListener('click', async () => {
+  async function copyCode(say) {
     try {
       await navigator.clipboard.writeText(household.code);
-      setHouseholdStatus('Code copied.');
+      say('Code copied.');
     } catch (e) {
       prompt('Copy this code:', household.code);
     }
-  });
+  }
 
-  $('#household-leave').addEventListener('click', () => {
-    if (!confirm('Stop sharing on this phone? It keeps a copy of everything as it is now, and the others keep the household.')) return;
+  function leaveHousehold() {
+    if (!confirm('Stop sharing on this phone? It keeps a copy of everything as it is now, and the others keep the household.')) return false;
     stopListening();
     household = null;
     synced = {};
     try { localStorage.removeItem(HOUSEHOLD_KEY); } catch (e) { /* storage unavailable */ }
     setHouseholdChip();
-    showHouseholdDialog();
-  });
+    return true;
+  }
+
+  $('#household-invite').addEventListener('click', () => sendInvite(setHouseholdStatus));
+  $('#household-copy').addEventListener('click', () => copyCode(setHouseholdStatus));
+  $('#household-leave').addEventListener('click', () => { if (leaveHousehold()) showHouseholdDialog(); });
+
+  // ---------- Household tab ----------
+
+  function setHomeStatus(text) {
+    const box = $('#home-status');
+    box.textContent = text;
+    box.hidden = !text;
+  }
+
+  function mealsPlannedThisWeek() {
+    const monday = mondayOf(new Date());
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(d.getDate() + i);
+      const day = data.plan[isoDate(d)] || {};
+      count += MEALS.filter(([meal]) => data.recipes.some((r) => r.id === day[meal])).length;
+    }
+    return count;
+  }
+
+  function plural(n, one, many) {
+    return `${n} ${n === 1 ? one : many}`;
+  }
+
+  function renderHousehold() {
+    const shared = !!household;
+    $('#home-shared').hidden = !shared;
+    $('#home-local').hidden = shared;
+    $('#home-sync').textContent = shared ? (householdState || 'connecting') : 'Only on this phone';
+    $('#home-sync').className = `badge ${shared && householdState === 'up to date' ? 'ok' : ''}`;
+    if (shared) $('#home-code').textContent = household.code;
+
+    const mineId = myId();
+    const people = [...data.members].sort((a, b) => (b.id === mineId) - (a.id === mineId) || a.name.localeCompare(b.name));
+    $('#home-people').replaceChildren(...people.map((m) => {
+      const foods = data.items.filter((i) => i.addedBy === m.id).length;
+      const recipes = data.recipes.filter((r) => r.addedBy === m.id).length;
+      const isMe = m.id === mineId;
+      return el('li', { class: `person ${isMe ? 'me' : ''}` },
+        avatar(m, 56),
+        el('div', { class: 'person-info' },
+          el('div', { class: 'person-name' }, m.name, isMe ? el('span', { class: 'you-tag' }, 'You') : null),
+          el('div', { class: 'muted person-stats' }, `Added ${plural(foods, 'food', 'foods')} · ${plural(recipes, 'recipe', 'recipes')}`)),
+        el('div', { class: 'person-actions' },
+          isMe ? null : el('button', { type: 'button', class: 'btn btn-small', onclick: () => { setMe(m.id); render(); } }, 'This is me'),
+          el('button', { type: 'button', class: 'btn btn-icon', title: `Edit ${m.name}`, 'aria-label': `Edit ${m.name}`, onclick: () => openProfileForm(m) }, '✎')));
+    }));
+    $('#home-people-empty').hidden = data.members.length > 0;
+
+    const glance = [
+      [data.items.length, 'Food in stock', 'Foods in stock'],
+      [data.recipes.length, 'Recipe saved', 'Recipes saved'],
+      [mealsPlannedThisWeek(), 'Meal planned this week', 'Meals planned this week'],
+      [data.places.length, 'Storage place', 'Storage places'],
+    ];
+    $('#home-glance').replaceChildren(...glance.map(([n, one, many]) =>
+      el('div', { class: 'stat' }, el('span', { class: 'stat-value' }, n), el('span', { class: 'stat-label' }, n === 1 ? one : many))));
+  }
+
+  $('#home-invite').addEventListener('click', () => sendInvite(setHomeStatus));
+  $('#home-copy').addEventListener('click', () => copyCode(setHomeStatus));
+  $('#home-leave').addEventListener('click', () => { if (leaveHousehold()) setHomeStatus('This phone has left the household. Everything is still saved here.'); });
+  $('#home-start').addEventListener('click', () => showHouseholdDialog());
+  $('#home-add-person').addEventListener('click', () => openProfileForm(null));
 
   // Opened from an invite link: #join=CODE
   function handleInvite() {

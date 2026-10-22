@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <header class="site-header">
@@ -27,6 +27,7 @@
         <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="true">My food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
         <button type="button" role="tab" class="tab" id="tab-plan" aria-controls="plan-view" aria-selected="false">Meal plan</button>
+        <button type="button" role="tab" class="tab" id="tab-home" aria-controls="home-view" aria-selected="false">Household</button>
       </nav>
     </div>
   </header>
@@ -112,6 +113,44 @@
         </div>
         <ul id="shopping" class="shopping-list"></ul>
         <p id="shopping-empty" class="muted"></p>
+      </section>
+    </div>
+
+    <div id="home-view" role="tabpanel" aria-labelledby="tab-home" hidden>
+      <section class="panel home-card">
+        <div class="home-head">
+          <h2>🏠 Your household</h2>
+          <span id="home-sync" class="badge"></span>
+        </div>
+        <div id="home-shared" hidden>
+          <p>Everyone below shares the same food list, recipes and meal plan. To add someone, send them the invite link or give them this code:</p>
+          <p class="household-code" id="home-code"></p>
+          <div class="home-actions">
+            <button type="button" class="btn btn-primary" id="home-invite">Send invite link</button>
+            <button type="button" class="btn" id="home-copy">Copy code</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-small btn-danger" id="home-leave">Leave household</button>
+          </div>
+        </div>
+        <div id="home-local">
+          <p>Your lists are only on this phone at the moment. Create a household to share them with the people you live with, or join one you've been invited to.</p>
+          <button type="button" class="btn btn-primary" id="home-start">Create or join a household</button>
+        </div>
+        <p id="home-status" class="ai-status" role="status" hidden></p>
+      </section>
+
+      <section class="panel">
+        <div class="home-head">
+          <h2>People</h2>
+          <button type="button" class="btn btn-small" id="home-add-person">+ Add a person</button>
+        </div>
+        <ul id="home-people" class="people"></ul>
+        <p id="home-people-empty" class="muted" hidden>No one's been added yet. Add yourself, then everyone can see who added what.</p>
+      </section>
+
+      <section class="panel">
+        <h2>At a glance</h2>
+        <div id="home-glance" class="stats glance"></div>
       </section>
     </div>
 
@@ -327,8 +366,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=12"></script>
-  <script src="firebase-config.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="avatars.js?v=13"></script>
+  <script src="firebase-config.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

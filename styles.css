@@ -449,3 +449,33 @@ dialog { max-height: calc(100dvh - 32px); }
 .avatar-option img { display: block; width: 100%; height: 100%; border-radius: 50%; }
 .avatar-option.selected { border-color: var(--accent); }
 .avatar-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Household tab */
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { white-space: nowrap; flex: none; }
+@media (max-width: 420px) { .tab { padding: 8px 7px; font-size: 0.94rem; } .tabs { gap: 2px; } }
+.home-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.home-head h2 { flex: 1; min-width: 0; }
+.home-card p { margin: 0; }
+#home-shared, #home-local { display: flex; flex-direction: column; gap: 10px; }
+#home-shared[hidden], #home-local[hidden] { display: none; }
+#home-local .btn { align-self: flex-start; }
+.home-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.person.me { border-color: var(--accent); }
+.person-info { flex: 1; min-width: 0; }
+.person-name { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.person-stats { font-size: 0.85rem; }
+.person-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.you-tag { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-text); background: var(--accent); padding: 1px 7px; border-radius: 999px; }
+.glance { margin: 0; }
+.glance .stat { background: var(--bg); }
