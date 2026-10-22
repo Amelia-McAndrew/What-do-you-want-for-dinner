@@ -1,4 +1,4 @@
-// Default profile pictures: small food characters drawn as SVG.
+// Default profile pictures: small food and animal characters drawn as SVG.
 // Each is turned into a data URL so it's stored and shared exactly like an uploaded photo.
 (() => {
   'use strict';
@@ -19,7 +19,7 @@
       + `</g>`;
   }
 
-  const AVATARS = [
+  const FOOD = [
     {
       id: 'avocado', name: 'Avocado', bg: '#e3f1d4',
       art: `<path d="M50 14c-12 0-17 14-21 26-5 13-11 20-11 32 0 15 14 22 32 22s32-7 32-22c0-12-6-19-11-32-4-12-9-26-21-26z" fill="#4c7a2a"/>`
@@ -107,6 +107,111 @@
     },
   ];
 
+  // A small nose and whiskers for the animals that need them.
+  const nose = (x, y, colour = '#e2697f') => `<path d="M${x - 4} ${y}h8l-4 4z" fill="${colour}" stroke="${colour}" stroke-width="1.5" stroke-linejoin="round"/>`;
+  const whiskers = (x, y) => `<path d="M${x - 14} ${y}h-12M${x - 14} ${y + 5}l-11 3M${x + 14} ${y}h12M${x + 14} ${y + 5}l11 3" stroke="${INK}" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>`;
+
+  const ANIMALS = [
+    {
+      id: 'cat', name: 'Cat', bg: '#ffe9d6',
+      art: `<path d="M22 46l4-28 20 16zM78 46l-4-28-20 16z" fill="#f2a04f"/><path d="M27 38l2-13 10 8zM73 38l-2-13-10 8z" fill="#ffc2c9"/>`
+        + `<ellipse cx="50" cy="58" rx="32" ry="28" fill="#f2a04f"/>`
+        + `<path d="M50 30v10M42 31l2 8M58 31l-2 8" stroke="#d9822f" stroke-width="3" stroke-linecap="round"/>`
+        + face(50, 58, 0.9) + nose(50, 61) + whiskers(50, 64),
+    },
+    {
+      id: 'dog', name: 'Dog', bg: '#e4ecfa',
+      art: `<ellipse cx="50" cy="56" rx="29" ry="30" fill="#d9a066"/>`
+        + `<ellipse cx="22" cy="52" rx="10" ry="20" fill="#8a5a35" transform="rotate(18 22 52)"/><ellipse cx="78" cy="52" rx="10" ry="20" fill="#8a5a35" transform="rotate(-18 78 52)"/>`
+        + `<ellipse cx="50" cy="70" rx="15" ry="11" fill="#f6e3c8"/><circle cx="62" cy="44" r="7" fill="#c48a52"/>`
+        + face(50, 54, 0.85) + `<ellipse cx="50" cy="64" rx="5" ry="3.5" fill="${INK}"/>`,
+    },
+    {
+      id: 'fox', name: 'Fox', bg: '#fde6da',
+      art: `<path d="M20 44l6-28 20 18zM80 44l-6-28-20 18z" fill="#ec7a2f"/><path d="M24 34l3-12 9 8zM76 34l-3-12-9 8z" fill="#3a2a22"/>`
+        + `<path d="M18 46c0-12 14-18 32-18s32 6 32 18c0 16-14 38-32 42-18-4-32-26-32-42z" fill="#ec7a2f"/>`
+        + `<path d="M18 48c10 0 22 8 32 22 10-14 22-22 32-22-4 18-16 36-32 40-16-4-28-22-32-40z" fill="#fff4ea"/>`
+        + face(50, 54, 0.85) + `<ellipse cx="50" cy="74" rx="4.5" ry="3.5" fill="${INK}"/>`,
+    },
+    {
+      id: 'bear', name: 'Bear', bg: '#efe4d8',
+      art: `<circle cx="26" cy="30" r="12" fill="#8b5e3c"/><circle cx="74" cy="30" r="12" fill="#8b5e3c"/><circle cx="26" cy="30" r="6" fill="#c49a6c"/><circle cx="74" cy="30" r="6" fill="#c49a6c"/>`
+        + `<circle cx="50" cy="56" r="31" fill="#8b5e3c"/><ellipse cx="50" cy="68" rx="14" ry="11" fill="#d8b48a"/>`
+        + face(50, 52, 0.85) + `<ellipse cx="50" cy="63" rx="5" ry="3.5" fill="${INK}"/>`,
+    },
+    {
+      id: 'panda', name: 'Panda', bg: '#e2f2e2',
+      art: `<circle cx="25" cy="31" r="11" fill="${INK}"/><circle cx="75" cy="31" r="11" fill="${INK}"/>`
+        + `<circle cx="50" cy="56" r="31" fill="#fff"/>`
+        + `<ellipse cx="38" cy="53" rx="8" ry="10" fill="${INK}" transform="rotate(25 38 53)"/><ellipse cx="62" cy="53" rx="8" ry="10" fill="${INK}" transform="rotate(-25 62 53)"/>`
+        + `<circle cx="39" cy="52" r="3" fill="#fff"/><circle cx="61" cy="52" r="3" fill="#fff"/>`
+        + `<ellipse cx="50" cy="65" rx="4.5" ry="3" fill="${INK}"/><path d="M45 71q5 4 10 0" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/>`
+        + `<circle cx="33" cy="66" r="3.6" fill="#ff7a8a" opacity=".45"/><circle cx="67" cy="66" r="3.6" fill="#ff7a8a" opacity=".45"/>`,
+    },
+    {
+      id: 'bunny', name: 'Bunny', bg: '#f1e5fb',
+      art: `<ellipse cx="38" cy="26" rx="8" ry="22" fill="#f4f1ee" transform="rotate(-10 38 26)"/><ellipse cx="62" cy="26" rx="8" ry="22" fill="#f4f1ee" transform="rotate(10 62 26)"/>`
+        + `<ellipse cx="38" cy="27" rx="4" ry="15" fill="#ffc2d1" transform="rotate(-10 38 27)"/><ellipse cx="62" cy="27" rx="4" ry="15" fill="#ffc2d1" transform="rotate(10 62 27)"/>`
+        + `<ellipse cx="50" cy="62" rx="28" ry="25" fill="#f4f1ee"/>`
+        + face(50, 60, 0.8) + nose(50, 65) + `<rect x="47" y="71" width="6" height="5" rx="1" fill="#fff" stroke="${INK}" stroke-width="1"/>`,
+    },
+    {
+      id: 'frog', name: 'Frog', bg: '#ddf3e5',
+      art: `<circle cx="32" cy="34" r="12" fill="#5fbf5a"/><circle cx="68" cy="34" r="12" fill="#5fbf5a"/>`
+        + `<ellipse cx="50" cy="60" rx="34" ry="25" fill="#5fbf5a"/>`
+        + `<circle cx="32" cy="34" r="7" fill="#fff"/><circle cx="68" cy="34" r="7" fill="#fff"/><circle cx="33" cy="35" r="4" fill="${INK}"/><circle cx="67" cy="35" r="4" fill="${INK}"/>`
+        + `<path d="M32 62q18 14 36 0" fill="none" stroke="${INK}" stroke-width="2.5" stroke-linecap="round"/>`
+        + `<circle cx="26" cy="58" r="4" fill="#ff7a8a" opacity=".45"/><circle cx="74" cy="58" r="4" fill="#ff7a8a" opacity=".45"/>`
+        + `<circle cx="46" cy="50" r="1.5" fill="#3f8f3a"/><circle cx="54" cy="50" r="1.5" fill="#3f8f3a"/>`,
+    },
+    {
+      id: 'pig', name: 'Pig', bg: '#fde2ea',
+      art: `<path d="M24 40l2-20 16 12zM76 40l-2-20-16 12z" fill="#f08ca3"/>`
+        + `<circle cx="50" cy="56" r="31" fill="#f7a8b8"/>`
+        + `<ellipse cx="50" cy="66" rx="13" ry="9" fill="#f08ca3"/><ellipse cx="45" cy="66" rx="2.5" ry="3.5" fill="#b8566c"/><ellipse cx="55" cy="66" rx="2.5" ry="3.5" fill="#b8566c"/>`
+        + `<circle cx="40" cy="48" r="3.4" fill="${INK}"/><circle cx="60" cy="48" r="3.4" fill="${INK}"/><circle cx="41" cy="46.8" r="1.1" fill="#fff"/><circle cx="61" cy="46.8" r="1.1" fill="#fff"/>`
+        + `<circle cx="30" cy="60" r="4" fill="#ff6f8a" opacity=".4"/><circle cx="70" cy="60" r="4" fill="#ff6f8a" opacity=".4"/>`,
+    },
+    {
+      id: 'owl', name: 'Owl', bg: '#e8e2f6',
+      art: `<path d="M24 30l8 12M76 30l-8 12" stroke="#7a5236" stroke-width="7" stroke-linecap="round"/>`
+        + `<path d="M20 56c0-18 13-28 30-28s30 10 30 28c0 20-13 32-30 32S20 76 20 56z" fill="#9c6b45"/>`
+        + `<path d="M34 70q16 14 32 0v8q-16 10-32 0z" fill="#c9a07a"/>`
+        + `<circle cx="38" cy="50" r="11" fill="#fff"/><circle cx="62" cy="50" r="11" fill="#fff"/><circle cx="39" cy="51" r="5" fill="${INK}"/><circle cx="61" cy="51" r="5" fill="${INK}"/><circle cx="40.5" cy="49.5" r="1.6" fill="#fff"/><circle cx="62.5" cy="49.5" r="1.6" fill="#fff"/>`
+        + `<path d="M46 60h8l-4 7z" fill="#f2a33a" stroke="#f2a33a" stroke-width="1.5" stroke-linejoin="round"/>`,
+    },
+    {
+      id: 'penguin', name: 'Penguin', bg: '#dcf0fb',
+      art: `<circle cx="50" cy="56" r="32" fill="#2f3542"/>`
+        + `<path d="M50 44c4-8 12-12 18-10 8 3 9 14 5 24-4 11-12 20-23 22-11-2-19-11-23-22-4-10-3-21 5-24 6-2 14 2 18 10z" fill="#fff"/>`
+        + `<circle cx="40" cy="52" r="3.4" fill="${INK}"/><circle cx="60" cy="52" r="3.4" fill="${INK}"/><circle cx="41" cy="50.8" r="1.1" fill="#fff"/><circle cx="61" cy="50.8" r="1.1" fill="#fff"/>`
+        + `<path d="M44 60h12l-6 7z" fill="#f2a33a" stroke="#f2a33a" stroke-width="1.5" stroke-linejoin="round"/>`
+        + `<circle cx="32" cy="62" r="4" fill="#ff7a8a" opacity=".45"/><circle cx="68" cy="62" r="4" fill="#ff7a8a" opacity=".45"/>`,
+    },
+    {
+      id: 'lion', name: 'Lion', bg: '#fff0cf',
+      art: Array.from({ length: 12 }, (_, i) => {
+        const a = (i / 12) * Math.PI * 2;
+        return `<circle cx="${(50 + Math.cos(a) * 30).toFixed(1)}" cy="${(55 + Math.sin(a) * 30).toFixed(1)}" r="11" fill="#c8682a"/>`;
+      }).join('')
+        + `<circle cx="50" cy="55" r="30" fill="#c8682a"/>`
+        + `<circle cx="31" cy="36" r="6" fill="#f2c063"/><circle cx="69" cy="36" r="6" fill="#f2c063"/>`
+        + `<circle cx="50" cy="56" r="23" fill="#f2c063"/><ellipse cx="50" cy="66" rx="10" ry="7" fill="#fbe3b0"/>`
+        + face(50, 53, 0.75) + `<path d="M46 61h8l-4 4z" fill="#8a4b2a" stroke="#8a4b2a" stroke-width="1.5" stroke-linejoin="round"/>`,
+    },
+    {
+      id: 'mouse', name: 'Mouse', bg: '#e9edf2',
+      art: `<circle cx="26" cy="34" r="16" fill="#a9b0bc"/><circle cx="74" cy="34" r="16" fill="#a9b0bc"/><circle cx="26" cy="34" r="9" fill="#f5b8c6"/><circle cx="74" cy="34" r="9" fill="#f5b8c6"/>`
+        + `<ellipse cx="50" cy="60" rx="26" ry="25" fill="#c5cbd5"/>`
+        + face(50, 58, 0.8) + `<circle cx="50" cy="66" r="3.5" fill="#e2697f"/>` + whiskers(50, 66),
+    },
+  ];
+
+  const AVATARS = [
+    ...FOOD.map((a) => ({ ...a, group: 'Food' })),
+    ...ANIMALS.map((a) => ({ ...a, group: 'Animals' })),
+  ];
+
   function svgFor(a) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${a.bg}"/>${a.art}</svg>`;
   }
@@ -114,6 +219,7 @@
   window.DEFAULT_AVATARS = AVATARS.map((a) => ({
     id: a.id,
     name: a.name,
+    group: a.group,
     url: `data:image/svg+xml,${encodeURIComponent(svgFor(a))}`,
   }));
 })();

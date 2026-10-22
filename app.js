@@ -926,10 +926,15 @@ Method:
   // The built-in food characters (avatars.js), stored like any other photo once picked.
   const CHARACTERS = window.DEFAULT_AVATARS || [];
 
-  $('#avatar-picker').replaceChildren(...CHARACTERS.map((c) =>
-    el('button', { type: 'button', class: 'avatar-option', 'data-url': c.url, title: c.name, 'aria-label': c.name, 'aria-pressed': 'false',
-      onclick: () => { pendingPhoto = c.url; showPhotoPreview(editingMember()); } },
-      el('img', { src: c.url, alt: '' }))));
+  const characterGroups = [...new Set(CHARACTERS.map((c) => c.group || 'Characters'))];
+  $('#avatar-picker').replaceChildren(...characterGroups.flatMap((group) => [
+    el('p', { class: 'picker-group' }, group),
+    el('div', { class: 'avatar-grid', role: 'group', 'aria-label': group },
+      CHARACTERS.filter((c) => (c.group || 'Characters') === group).map((c) =>
+        el('button', { type: 'button', class: 'avatar-option', 'data-url': c.url, title: c.name, 'aria-label': c.name, 'aria-pressed': 'false',
+          onclick: () => { pendingPhoto = c.url; showPhotoPreview(editingMember()); } },
+          el('img', { src: c.url, alt: '' })))),
+  ]));
   $('#avatar-picker').hidden = CHARACTERS.length === 0;
 
   function openProfileForm(member) {

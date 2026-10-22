@@ -434,7 +434,9 @@ dialog { max-height: calc(100dvh - 32px); }
 
 /* Character picker */
 .picker-label { margin: 0 0 6px; font-size: 0.85rem; }
-.avatar-picker { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
+.avatar-picker { margin-bottom: 14px; }
+.picker-group { margin: 8px 0 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.avatar-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .avatar-option {
   padding: 2px;
   border: 2px solid transparent;
