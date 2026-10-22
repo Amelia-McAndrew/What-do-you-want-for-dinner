@@ -479,3 +479,9 @@ dialog { max-height: calc(100dvh - 32px); }
 .you-tag { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-text); background: var(--accent); padding: 1px 7px; border-radius: 999px; }
 .glance { margin: 0; }
 .glance .stat { background: var(--bg); }
+
+/* Food types */
+.type-badge { color: var(--muted); }
+.shopping-list { list-style: none; padding-left: 0; gap: 12px; }
+.shopping-group h3 { margin: 0 0 4px; font-size: 0.95rem; }
+.shopping-group ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }

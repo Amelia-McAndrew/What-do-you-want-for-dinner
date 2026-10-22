@@ -20,6 +20,52 @@
   const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
   const TAB_KEY = 'wdywfd-tab';
 
+  // Kinds of food, in rough supermarket order (used to group the shopping list).
+  const FOOD_TYPES = [
+    ['produce', '🥦', 'Fruit & veg'],
+    ['bakery', '🍞', 'Bread & bakery'],
+    ['meat', '🥩', 'Meat & fish'],
+    ['dairy', '🧀', 'Dairy & eggs'],
+    ['grains', '🍝', 'Pasta, rice & grains'],
+    ['tins', '🥫', 'Tins & jars'],
+    ['sauces', '🧂', 'Sauces, oils & spices'],
+    ['baking', '🧁', 'Baking'],
+    ['snacks', '🍫', 'Snacks & sweets'],
+    ['drinks', '🥤', 'Drinks'],
+    ['other', '🛒', 'Other'],
+  ];
+  const TYPE_INFO = Object.fromEntries(FOOD_TYPES.map(([id, icon, label]) => [id, { icon, label }]));
+
+  // Checked in order, so specific phrases ("coconut milk", "peanut butter") win over single words.
+  const TYPE_KEYWORDS = [
+    ['other', /\b(kitchen roll|toilet roll|foil|cling film|bin bags|washing.up|soap|bleach|nappies|tissues)\b/],
+    ['produce', /\b(bell|red|green|yellow|orange|sweet) peppers?\b/],
+    ['snacks', /\bice cream\b/],
+    ['tins', /\b(tins?|tinned|cans?|canned|chopped tomatoes|passata|tomato (puree|paste)|baked beans|coconut milk|peanut butter|jam|marmalade|honey|chickpeas|kidney beans|black beans|butter beans|lentils|sweetcorn|tuna|sardines|olives|pickles?|capers|nutella|soup)\b/],
+    ['sauces', /\b(sauce|ketchup|mayo(nnaise)?|mustard|vinegar|oil|stock|gravy|soy|gochujang|miso|pesto|salsa|chutney|dressing|salt|pepper(corns)?|spices?|paprika|cumin|turmeric|curry powder|chilli flakes|cinnamon|oregano|thyme|basil|rosemary|bay leaves|herbs?|seasoning|garam masala|sriracha|harissa|worcestershire)\b/],
+    ['baking', /\b(flour|sugar|baking (powder|soda)|bicarbonate|yeast|cocoa|vanilla|icing|chocolate chips|cornflour|caster|syrup|treacle|oats)\b/],
+    ['grains', /\b(pasta|spaghetti|penne|fusilli|linguine|lasagne|noodles?|rice|couscous|quinoa|bulgur|cereal|porridge|granola|crackers?|gnocchi|risotto)\b/],
+    ['bakery', /\b(bread|loaf|rolls?|baguette|bagels?|wraps?|tortillas?|pittas?|naan|croissants?|crumpets?|muffins?|buns?|brioche|ciabatta|sourdough)\b/],
+    ['meat', /\b(chicken|beef|pork|lamb|turkey|duck|mince|steak|bacon|ham|sausages?|chorizo|salami|pepperoni|gammon|fish|salmon|cod|haddock|prawns?|shrimp|mackerel|trout|seafood|mussels|squid|meatballs?|burgers?|thighs?|breasts?|drumsticks?|wings?|ribs?|tofu|quorn)\b/],
+    ['dairy', /\b(milk|cheese|cheddar|mozzarella|parmesan|feta|halloumi|brie|butter|cream|creme fraiche|crème fraîche|yogh?urt|eggs?|custard|mascarpone|ricotta|paneer)\b/],
+    ['drinks', /\b(juice|water|squash|cola|lemonade|tea|coffee|beer|wine|cider|smoothie|drink)\b/],
+    ['snacks', /\b(crisps|chocolate|biscuits?|sweets|popcorn|nuts|cake|cookies?|ice cream|snacks?|crackers)\b/],
+    ['produce', /\b(apples?|bananas?|oranges?|lemons?|limes?|grapes?|berries|strawberr(y|ies)|blueberr(y|ies)|raspberr(y|ies)|melon|mango|pineapple|pears?|peach(es)?|plums?|avocados?|tomato(es)?|potato(es)?|onions?|garlic|ginger|carrots?|peppers?|chill(i|ies)|courgettes?|aubergines?|broccoli|cauliflower|cabbage|spinach|lettuce|salad|kale|cucumber|celery|leeks?|mushrooms?|peas|beans|sweet potato(es)?|squash|pumpkin|spring onions?|shallots?|herbs|coriander|parsley|mint|rocket|beetroot|sprouts|asparagus|corn|fruit|veg(etables?)?)\b/],
+  ];
+
+  function guessType(text) {
+    const t = ` ${text.toLowerCase()} `;
+    for (const [type, pattern] of TYPE_KEYWORDS) {
+      if (pattern.test(t)) return type;
+    }
+    return 'other';
+  }
+
+  // The type a food item counts as: what the person chose, or a guess from its name.
+  function typeOf(item) {
+    return TYPE_INFO[item.type] ? item.type : guessType(item.name);
+  }
+
   // ---------- State ----------
 
   let data = load();
@@ -174,14 +220,17 @@
   function renderPlaces() {
     const container = $('#places');
     const query = $('#search').value.trim().toLowerCase();
+    const typeFilter = $('#type-filter').value;
+    const filtering = query || typeFilter;
     container.replaceChildren();
     $('#places-empty').hidden = data.places.length > 0;
 
     for (const place of data.places) {
       const all = data.items.filter((i) => i.placeId === place.id);
       const shown = sortItems(all.filter((i) =>
-        !query || i.name.toLowerCase().includes(query) || (i.notes || '').toLowerCase().includes(query)));
-      if (query && shown.length === 0) continue;
+        (!query || i.name.toLowerCase().includes(query) || (i.notes || '').toLowerCase().includes(query))
+        && (!typeFilter || typeOf(i) === typeFilter)));
+      if (filtering && shown.length === 0) continue;
 
       const list = el('ul', { class: 'items' }, shown.map(renderItem));
 
@@ -212,6 +261,7 @@
       el('div', { class: 'item-meta' },
         el('span', { class: `badge ${exp.cls}` }, exp.text),
         el('span', { class: `badge ${low ? 'low' : ''}` }, amountText(item)),
+        el('span', { class: 'badge type-badge' }, `${TYPE_INFO[typeOf(item)].icon} ${TYPE_INFO[typeOf(item)].label}`),
       ),
       ratio !== null
         ? el('div', { class: `meter ${low ? 'low' : ''}`, role: 'meter', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(ratio * 100), 'aria-label': `${Math.round(ratio * 100)}% left` },
@@ -633,18 +683,27 @@ Method:
       for (const line of recipe.ingredients) {
         if (stockFor(line)) continue;
         const key = line.toLowerCase();
-        if (!needed.has(key)) needed.set(key, { line, recipes: new Set() });
+        if (!needed.has(key)) needed.set(key, { line, type: guessType(line), recipes: new Set() });
         needed.get(key).recipes.add(recipe.name);
       }
     }
-    return [...needed.values()];
+    const order = FOOD_TYPES.map(([id]) => id);
+    return [...needed.values()].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+  }
+
+  function shoppingByType(list) {
+    return FOOD_TYPES.map(([id, icon, label]) => ({ icon, label, lines: list.filter((x) => x.type === id) }))
+      .filter((group) => group.lines.length);
   }
 
   function renderShopping() {
     const list = shoppingList();
     const planned = plannedRecipes().length;
-    $('#shopping').replaceChildren(...list.map(({ line, recipes }) =>
-      el('li', {}, line, el('span', { class: 'for' }, ` · for ${[...recipes].join(', ')}`))));
+    $('#shopping').replaceChildren(...shoppingByType(list).map(({ icon, label, lines }) =>
+      el('li', { class: 'shopping-group' },
+        el('h3', {}, `${icon} ${label}`),
+        el('ul', {}, lines.map(({ line, recipes }) =>
+          el('li', {}, line, el('span', { class: 'for' }, ` · for ${[...recipes].join(', ')}`)))))));
     $('#shopping-empty').hidden = list.length > 0;
     $('#shopping-empty').textContent = planned
       ? 'You already have everything for this week’s meals.'
@@ -653,7 +712,9 @@ Method:
   }
 
   $('#copy-shopping').addEventListener('click', async () => {
-    const text = shoppingList().map(({ line }) => `- ${line}`).join('\n');
+    const text = shoppingByType(shoppingList())
+      .map(({ icon, label, lines }) => `${icon} ${label}\n${lines.map(({ line }) => `- ${line}`).join('\n')}`)
+      .join('\n\n');
     try {
       await navigator.clipboard.writeText(text);
       $('#copy-shopping').textContent = 'Copied';
@@ -717,6 +778,9 @@ Method:
       el('option', { value: p.id }, `${p.icon ? p.icon + ' ' : ''}${p.name}`)));
     $('#item-id').value = item?.id ?? '';
     $('#item-name').value = item?.name ?? '';
+    // A new item's type follows the name until the person picks one themselves.
+    typeChosen = !!(item && TYPE_INFO[item.type]);
+    $('#item-type').value = item ? typeOf(item) : 'other';
     $('#item-place').value = item?.placeId ?? placeId ?? data.places[0].id;
     $('#item-expiry').value = item?.expiry ?? '';
     $('#item-qty').value = item ? fmtNum(item.qty) : '1';
@@ -728,11 +792,19 @@ Method:
     $('#item-name').focus();
   }
 
+  let typeChosen = false;
+  $('#item-type').replaceChildren(...FOOD_TYPES.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)));
+  $('#item-type').addEventListener('change', () => { typeChosen = true; });
+  $('#item-name').addEventListener('input', () => {
+    if (!typeChosen) $('#item-type').value = guessType($('#item-name').value);
+  });
+
   $('#item-form').addEventListener('submit', () => {
     const id = $('#item-id').value;
     const full = parseFloat($('#item-full').value);
     const fields = {
       name: $('#item-name').value.trim(),
+      type: $('#item-type').value,
       placeId: $('#item-place').value,
       expiry: $('#item-expiry').value || null,
       qty: Math.max(0, parseFloat($('#item-qty').value) || 0),
@@ -806,6 +878,8 @@ Method:
   $('#add-place-btn').addEventListener('click', () => openPlaceDialog(null));
   $('#search').addEventListener('input', renderPlaces);
   $('#sort').addEventListener('change', renderPlaces);
+  $('#type-filter').append(...FOOD_TYPES.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)));
+  $('#type-filter').addEventListener('change', renderPlaces);
 
   // Export / import
   $('#export-btn').addEventListener('click', () => {

@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <header class="site-header">
@@ -53,6 +53,9 @@
     <section class="toolbar">
       <div class="toolbar-group">
         <input type="search" id="search" placeholder="Search food…" aria-label="Search food">
+        <select id="type-filter" aria-label="Show a type of food">
+          <option value="">All types</option>
+        </select>
         <select id="sort" aria-label="Sort items">
           <option value="expiry">Sort: going off soonest</option>
           <option value="name">Sort: name A–Z</option>
@@ -169,9 +172,14 @@
       <label>Food
         <input type="text" id="item-name" required placeholder="e.g. Chicken thighs">
       </label>
-      <label>Storage place
-        <select id="item-place" required></select>
-      </label>
+      <div class="row">
+        <label>Type
+          <select id="item-type"></select>
+        </label>
+        <label>Storage place
+          <select id="item-place" required></select>
+        </label>
+      </div>
       <label>Goes off on
         <input type="date" id="item-expiry">
       </label>
@@ -366,8 +374,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=13"></script>
-  <script src="firebase-config.js?v=13"></script>
-  <script src="app.js?v=13"></script>
+  <script src="avatars.js?v=14"></script>
+  <script src="firebase-config.js?v=14"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

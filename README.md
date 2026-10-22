@@ -4,6 +4,7 @@ A simple dashboard for keeping track of the food you have at home.
 
 - **Storage places** – starts with Fridge, Freezer and Cupboard; add, rename or delete your own (e.g. "Garage freezer", "Spice rack").
 - **Food items** – for each item record which storage place it's in, when it goes off, how much is left (with a unit), and optionally the full amount so you get a "how much is left" bar.
+- **Food types** – each item has a type (Fruit & veg, Meat & fish, Dairy & eggs, Bread & bakery, Pasta, rice & grains, Tins & jars, Sauces, oils & spices, Baking, Snacks & sweets, Drinks, Other). It's filled in from the name as you type and can be changed; older items get a guessed type. Filter the food list by type, and the meal plan's shopping list is grouped by type.
 - **Dashboard** – totals for items, things going off in the next 3 days, things that have gone off, and things running low.
 - **Use these first** – a list of food that's about to go off, so you know what to cook tonight.
 - Search, sort (soonest to go off, name, least left), a quick "−1" button to use some up, and export/import of your data as JSON.
