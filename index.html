@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
   <header class="site-header">
@@ -24,16 +24,64 @@
         <button type="button" class="household-chip" id="household-btn">🏠 Share with your household</button>
       </div>
       <nav class="tabs" role="tablist" aria-label="Sections">
-        <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="true">My food</button>
+        <button type="button" role="tab" class="tab" id="tab-today" aria-controls="today-view" aria-selected="true">Today</button>
+        <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="false">Food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
-        <button type="button" role="tab" class="tab" id="tab-plan" aria-controls="plan-view" aria-selected="false">Meal plan</button>
+        <button type="button" role="tab" class="tab" id="tab-plan" aria-controls="plan-view" aria-selected="false">Plan</button>
         <button type="button" role="tab" class="tab" id="tab-home" aria-controls="home-view" aria-selected="false">Household</button>
       </nav>
     </div>
   </header>
 
   <main class="wrap">
-    <div id="food-view" role="tabpanel" aria-labelledby="tab-food">
+    <div id="today-view" role="tabpanel" aria-labelledby="tab-today" class="dashboard">
+      <section class="panel widget widget-today">
+        <div class="widget-head">
+          <h2 id="today-title">Today’s meals</h2>
+          <span class="muted" id="today-date"></span>
+        </div>
+        <p id="today-earlier" class="muted earlier" hidden></p>
+        <div id="today-meals" class="dash-meals"></div>
+      </section>
+
+      <section class="panel widget">
+        <div class="widget-head">
+          <h2>Going off <span id="dash-warn-count" class="count-pill" hidden></span></h2>
+        </div>
+        <ul id="dash-warnings" class="warn-list"></ul>
+        <p id="dash-warnings-empty" class="muted">Nothing is going off in the next 3 days.</p>
+        <div id="dash-low-wrap" hidden>
+          <h3 class="sub-head">Running low</h3>
+          <ul id="dash-low" class="low-list"></ul>
+        </div>
+      </section>
+
+      <section class="panel widget">
+        <div class="widget-head">
+          <h2>Day by day</h2>
+          <div class="dash-nav">
+            <button type="button" class="btn btn-icon" id="dash-prev" aria-label="Previous week">‹</button>
+            <button type="button" class="btn btn-icon" id="dash-next" aria-label="Next week">›</button>
+          </div>
+        </div>
+        <div id="dash-days" class="day-strip" role="group" aria-label="Pick a day"></div>
+        <h3 id="dash-day-title" class="sub-head"></h3>
+        <div id="dash-day-meals" class="dash-meals"></div>
+      </section>
+
+      <section class="panel widget">
+        <div class="widget-head">
+          <h2>Shopping list</h2>
+          <span class="muted" id="dash-shop-count"></span>
+          <button type="button" class="btn btn-small" id="dash-copy">Copy list</button>
+        </div>
+        <p class="muted widget-note">For the next 7 days of planned meals. Tick things off as you shop.</p>
+        <ul id="dash-shopping" class="shopping-list"></ul>
+        <p id="dash-shopping-empty" class="muted"></p>
+      </section>
+    </div>
+
+    <div id="food-view" role="tabpanel" aria-labelledby="tab-food" hidden>
     <!-- Summary tiles -->
     <section class="stats" aria-label="Summary">
       <div class="stat"><span class="stat-value" id="stat-total">0</span><span class="stat-label">Items</span></div>
@@ -361,6 +409,18 @@
     </form>
   </dialog>
 
+  <!-- Recipe view (from Today) -->
+  <dialog id="recipe-view">
+    <form method="dialog">
+      <div id="recipe-view-body"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="recipe-view-edit">Edit recipe</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Place dialog -->
   <dialog id="place-dialog">
     <form id="place-form" method="dialog">
@@ -390,8 +450,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=16"></script>
-  <script src="firebase-config.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="avatars.js?v=17"></script>
+  <script src="firebase-config.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

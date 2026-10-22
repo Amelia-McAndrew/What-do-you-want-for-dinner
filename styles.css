@@ -507,3 +507,76 @@ dialog { max-height: calc(100dvh - 32px); }
 /* Best before dates */
 .badge.best { color: var(--muted); border-style: dashed; }
 .date-hint { margin: -6px 0 12px; }
+
+/* Today dashboard */
+.dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
+.dashboard .panel { margin-bottom: 0; }
+.widget { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.widget-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.widget-head h2 { margin: 0; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.widget-note, .earlier { margin: 0; font-size: 0.85rem; }
+.sub-head { margin: 4px 0 0; font-size: 0.95rem; }
+.count-pill { font-size: 0.75rem; background: var(--bad-bg); color: var(--bad); border-radius: 999px; padding: 1px 8px; }
+.dash-meals { display: flex; flex-direction: column; gap: 8px; }
+.dash-meal { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.dash-meal.next { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.dash-meal.empty { flex-direction: row; align-items: center; justify-content: space-between; }
+.dash-meal.empty .dash-meal-label { color: var(--muted); }
+.dash-meal-head { display: flex; align-items: center; gap: 8px; }
+.dash-meal-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.next-tag { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-text); background: var(--accent); border-radius: 999px; padding: 1px 7px; }
+.dash-dishes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dash-dish {
+  font: inherit;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+}
+.dash-dish:hover { border-color: var(--border); }
+.dash-dish-name { font-weight: 600; overflow-wrap: anywhere; }
+.dash-dish-meta { font-size: 0.82rem; color: var(--muted); }
+.ok-text { color: var(--ok); font-weight: 600; }
+.dash-nav { display: flex; gap: 4px; }
+.day-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.day-chip {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  min-width: 0;
+}
+.day-chip.selected { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.day-chip-name { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.day-chip-date { font-weight: 700; font-variant-numeric: tabular-nums; }
+.day-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
+.day-chip-dot.on { background: var(--accent); }
+.day-chip.selected .day-chip-dot.on { background: var(--accent-text); }
+.warn-list, .low-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.warn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); }
+.warn-row.gone { background: var(--bad-bg); }
+.warn-info { flex: 1; min-width: 120px; display: flex; flex-direction: column; }
+.warn-name { font-weight: 600; overflow-wrap: anywhere; }
+.warn-where { font-size: 0.8rem; }
+.low-list li { font-size: 0.9rem; }
+.shopping-group h4 { margin: 0 0 4px; font-size: 0.9rem; }
+.tick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tick-list li { display: flex; align-items: flex-start; gap: 8px; }
+.tick-list input { width: auto; margin-top: 3px; accent-color: var(--accent); }
+.tick-list label { margin: 0; overflow-wrap: anywhere; }
+.tick-list li.done label { text-decoration: line-through; color: var(--muted); }
+#recipe-view .recipe { border: none; padding: 0; }

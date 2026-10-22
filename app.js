@@ -31,7 +31,6 @@
   ];
   const KIND_INFO = Object.fromEntries(KINDS.map(([id, icon, label, plural]) => [id, { icon, label, plural }]));
   const kindOf = (recipe) => (KIND_INFO[recipe.course] ? recipe.course : 'meal');
-  const TAB_KEY = 'wdywfd-tab';
 
   // Kinds of food, in rough supermarket order (used to group the shopping list).
   const FOOD_TYPES = [
@@ -220,6 +219,7 @@
     renderPlan();
     renderProfileButton();
     renderHousehold();
+    renderToday();
   }
 
   function renderStats() {
@@ -315,12 +315,18 @@
   }
 
   // The food item that covers an ingredient line, if any. Prefers items that haven't gone off.
+  // Treat singular and plural the same ("pepper" / "peppers", "potato" / "potatoes").
+  function singular(text) {
+    return text.toLowerCase().replace(/(\w{3,}?)(es|s)\b/g, (word, stem, end) =>
+      (end === 'es' && /(o|ch|sh|x|ss)$/.test(stem) ? stem : end === 'es' ? `${stem}e` : stem)).trim();
+  }
+
   function stockFor(line) {
-    const name = ingredientName(line);
-    const full = line.toLowerCase();
+    const name = singular(ingredientName(line));
+    const full = singular(line);
     if (name.length < 3) return null;
     const matches = data.items.filter((item) => {
-      const food = item.name.toLowerCase().trim();
+      const food = singular(item.name.trim());
       if (item.qty <= 0 || food.length < 3) return false;
       return full.includes(food) || food.includes(name);
     });
@@ -766,10 +772,10 @@ Method:
     renderShopping();
   }
 
-  // Ingredients for this week's meals that aren't in stock, merged by line.
-  function shoppingList() {
+  // Ingredients for the given meals (this week's by default) that aren't in stock, merged by line.
+  function shoppingList(recipes = plannedRecipes()) {
     const needed = new Map();
-    for (const recipe of plannedRecipes()) {
+    for (const recipe of recipes) {
       for (const line of recipe.ingredients) {
         if (stockFor(line)) continue;
         const key = line.toLowerCase();
@@ -825,9 +831,210 @@ Method:
     renderPlan();
   });
 
+  // ---------- Today (dashboard) ----------
+
+  const TICKS_KEY = 'wdywfd-shopping-ticks';
+  let dashOffset = 1;   // which day the day-by-day card shows, in days from today
+
+  function addDays(date, n) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  function dayRecipes(date, meal) {
+    return slotIds(data.plan[isoDate(date)], meal)
+      .map((id) => data.recipes.find((r) => r.id === id))
+      .filter(Boolean);
+  }
+
+  function dayLabel(offset, date) {
+    if (offset === 0) return 'Today';
+    if (offset === 1) return 'Tomorrow';
+    return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+  }
+
+  // One meal (breakfast, lunch or dinner) with its dishes, or a prompt to plan it.
+  function mealBlock(date, meal, label, highlight) {
+    const dishes = dayRecipes(date, meal);
+    return el('div', { class: `dash-meal ${highlight ? 'next' : ''} ${dishes.length ? '' : 'empty'}` },
+      el('div', { class: 'dash-meal-head' },
+        el('span', { class: 'dash-meal-label' }, label),
+        highlight ? el('span', { class: 'next-tag' }, 'Next up') : null),
+      dishes.length
+        ? el('ul', { class: 'dash-dishes' }, dishes.map((r) => {
+            const stock = recipeStock(r);
+            const kind = kindOf(r);
+            return el('li', {},
+              el('button', { type: 'button', class: 'dash-dish', onclick: () => openRecipeView(r) },
+                el('span', { class: 'dash-dish-name' }, kind !== 'meal' ? `${KIND_INFO[kind].icon} ` : '', r.name),
+                el('span', { class: 'dash-dish-meta' },
+                  r.time ? `⏱ ${timeText(r.time)}` : '',
+                  stock.total ? el('span', { class: stock.have === stock.total ? 'ok-text' : '' },
+                    `${r.time ? ' · ' : ''}${stock.have === stock.total ? 'All in stock' : `${stock.have}/${stock.total} in stock`}`) : null)));
+          }))
+        : el('button', { type: 'button', class: 'btn btn-small', onclick: () => { weekStart = mondayOf(date); showTab('plan'); renderPlan(); } }, 'Plan it'));
+  }
+
+  function renderToday() {
+    const now = new Date();
+    const hour = now.getHours();
+    // After 9pm the "today" card looks ahead to tomorrow.
+    const lateEvening = hour >= 21;
+    const day = lateEvening ? addDays(now, 1) : addDays(now, 0);
+    const nextMeal = lateEvening || hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : 'dinner';
+    $('#today-title').textContent = lateEvening ? 'Tomorrow’s meals' : 'Today’s meals';
+    $('#today-date').textContent = day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    const nextIndex = MEALS.findIndex(([m]) => m === nextMeal);
+    $('#today-meals').replaceChildren(...MEALS.map(([meal, label], i) =>
+      i < nextIndex && !lateEvening
+        ? null
+        : mealBlock(day, meal, label, meal === nextMeal)).filter(Boolean));
+    $('#today-earlier').hidden = lateEvening || nextIndex === 0;
+    $('#today-earlier').textContent = nextIndex === 1 ? 'Breakfast is done for today.' : 'Breakfast and lunch are done for today.';
+
+    renderDayByDay();
+    renderWarnings();
+    renderDashShopping();
+  }
+
+  function renderDayByDay() {
+    const base = addDays(new Date(), 0);
+    const weekFirst = Math.floor(dashOffset / 7) * 7;
+    $('#dash-days').replaceChildren(...Array.from({ length: 7 }, (_, i) => {
+      const offset = weekFirst + i;
+      const date = addDays(base, offset);
+      const planned = MEALS.some(([meal]) => dayRecipes(date, meal).length);
+      return el('button', { type: 'button', class: `day-chip ${offset === dashOffset ? 'selected' : ''}`, 'aria-pressed': String(offset === dashOffset), onclick: () => { dashOffset = offset; renderDayByDay(); } },
+        el('span', { class: 'day-chip-name' }, offset === 0 ? 'Today' : date.toLocaleDateString(undefined, { weekday: 'short' })),
+        el('span', { class: 'day-chip-date' }, date.getDate()),
+        el('span', { class: `day-chip-dot ${planned ? 'on' : ''}`, 'aria-label': planned ? 'Meals planned' : 'Nothing planned' }));
+    }));
+    $('#dash-prev').disabled = weekFirst <= 0;
+    const date = addDays(base, dashOffset);
+    $('#dash-day-title').textContent = dayLabel(dashOffset, date);
+    $('#dash-day-meals').replaceChildren(...MEALS.map(([meal, label]) => mealBlock(date, meal, label, false)));
+  }
+
+  $('#dash-prev').addEventListener('click', () => { dashOffset = Math.max(0, Math.floor(dashOffset / 7) * 7 - 7); renderDayByDay(); });
+  $('#dash-next').addEventListener('click', () => { dashOffset = Math.floor(dashOffset / 7) * 7 + 7; renderDayByDay(); });
+
+  function renderWarnings() {
+    const urgent = data.items
+      .map((item) => ({ item, days: warnDays(item) }))
+      .filter((x) => x.days !== null && x.days <= SOON_DAYS)
+      .sort((a, b) => a.days - b.days);
+    $('#dash-warnings').replaceChildren(...urgent.map(({ item, days }) => {
+      const place = data.places.find((p) => p.id === item.placeId);
+      const exp = expiryInfo(item);
+      return el('li', { class: `warn-row ${days < 0 ? 'gone' : ''}` },
+        el('div', { class: 'warn-info' },
+          el('span', { class: 'warn-name' }, item.name),
+          el('span', { class: 'muted warn-where' }, `${place ? place.name : ''}${place ? ' · ' : ''}${amountText(item)}`)),
+        el('span', { class: `badge ${exp.cls}` }, exp.text),
+        el('button', { type: 'button', class: 'btn btn-small', title: `Remove ${item.name}`, onclick: () => {
+          if (!confirm(`Remove ${item.name} from your food?`)) return;
+          data.items = data.items.filter((i) => i.id !== item.id);
+          save();
+          render();
+        } }, days < 0 ? 'Bin it' : 'Used it'));
+    }));
+    $('#dash-warnings-empty').hidden = urgent.length > 0;
+    $('#dash-warn-count').textContent = urgent.length ? String(urgent.length) : '';
+    $('#dash-warn-count').hidden = !urgent.length;
+
+    const low = data.items.filter(isLow);
+    $('#dash-low-wrap').hidden = low.length === 0;
+    $('#dash-low').replaceChildren(...low.map((item) => el('li', {}, item.name, el('span', { class: 'muted' }, ` · ${amountText(item)}`))));
+  }
+
+  function loadTicks() {
+    try { return JSON.parse(localStorage.getItem(TICKS_KEY) || '{}'); } catch (e) { return {}; }
+  }
+
+  function saveTicks(ticks) {
+    try { localStorage.setItem(TICKS_KEY, JSON.stringify(ticks)); } catch (e) { /* storage unavailable */ }
+  }
+
+  // Shopping for the next 7 days of planned meals.
+  function upcomingShopping() {
+    const recipes = [];
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(new Date(), i);
+      for (const [meal] of MEALS) recipes.push(...dayRecipes(date, meal));
+    }
+    return { list: shoppingList(recipes), planned: recipes.length };
+  }
+
+  function renderDashShopping() {
+    const { list, planned } = upcomingShopping();
+    const ticks = loadTicks();
+    // Forget ticks for things no longer on the list.
+    const keys = new Set(list.map(({ line }) => line.toLowerCase()));
+    for (const key of Object.keys(ticks)) if (!keys.has(key)) delete ticks[key];
+    saveTicks(ticks);
+
+    const left = list.filter(({ line }) => !ticks[line.toLowerCase()]).length;
+    $('#dash-shop-count').textContent = list.length ? `${left} to get` : '';
+    $('#dash-shopping').replaceChildren(...shoppingByType(list).map(({ icon, label, lines }) =>
+      el('li', { class: 'shopping-group' },
+        el('h4', {}, `${icon} ${label}`),
+        el('ul', { class: 'tick-list' }, lines.map(({ line, recipes }) => {
+          const key = line.toLowerCase();
+          const id = `tick-${key.replace(/[^a-z0-9]+/g, '-')}`;
+          return el('li', { class: ticks[key] ? 'done' : '' },
+            el('input', { type: 'checkbox', id, checked: ticks[key] ? 'checked' : null, onchange: (e) => {
+              const now = loadTicks();
+              if (e.target.checked) now[key] = true; else delete now[key];
+              saveTicks(now);
+              renderDashShopping();
+            } }),
+            el('label', { for: id }, line, el('span', { class: 'for' }, ` · ${[...recipes].join(', ')}`)));
+        })))));
+    $('#dash-shopping-empty').hidden = list.length > 0;
+    $('#dash-shopping-empty').textContent = planned
+      ? 'You already have everything for the next 7 days of meals.'
+      : 'Plan some meals and anything you need for the next 7 days will show up here.';
+    $('#dash-copy').hidden = left === 0;
+  }
+
+  $('#dash-copy').addEventListener('click', async () => {
+    const ticks = loadTicks();
+    const list = upcomingShopping().list.filter(({ line }) => !ticks[line.toLowerCase()]);
+    const text = shoppingByType(list)
+      .map(({ icon, label, lines }) => `${icon} ${label}\n${lines.map(({ line }) => `- ${line}`).join('\n')}`)
+      .join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      $('#dash-copy').textContent = 'Copied';
+      setTimeout(() => { $('#dash-copy').textContent = 'Copy list'; }, 1500);
+    } catch (e) {
+      prompt('Copy your shopping list:', text);
+    }
+  });
+
+  // Read-only recipe, opened from the dashboard (handy while cooking).
+  const recipeView = $('#recipe-view');
+  let viewing = null;
+
+  function openRecipeView(recipe) {
+    viewing = recipe;
+    const card = renderRecipe(recipe, recipeStock(recipe));
+    const details = card.querySelector('details');
+    if (details) details.open = true;
+    card.querySelector('.recipe-head button')?.remove();
+    $('#recipe-view-body').replaceChildren(card);
+    recipeView.showModal();
+  }
+
+  $('#recipe-view-edit').addEventListener('click', () => {
+    recipeView.close();
+    if (viewing) openRecipeDialog(viewing);
+  });
+
   // ---------- Tabs ----------
 
-  const TABS = ['food', 'recipes', 'plan', 'home'];
+  const TABS = ['today', 'food', 'recipes', 'plan', 'home'];
 
   function showTab(name) {
     for (const tab of TABS) {
@@ -835,14 +1042,10 @@ Method:
       $(`#${tab}-view`).hidden = tab !== name;
     }
     if (name === 'home') renderHousehold();
-    try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* storage unavailable */ }
   }
 
+  // The app always opens on Today, the dashboard.
   for (const tab of TABS) $(`#tab-${tab}`).addEventListener('click', () => showTab(tab));
-  try {
-    const saved = localStorage.getItem(TAB_KEY);
-    if (TABS.includes(saved)) showTab(saved);
-  } catch (e) { /* storage unavailable */ }
 
   // ---------- Actions ----------
 

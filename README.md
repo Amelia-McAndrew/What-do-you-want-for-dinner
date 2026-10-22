@@ -2,6 +2,7 @@
 
 A simple dashboard for keeping track of the food you have at home.
 
+- **Today dashboard** – the app opens on Today, with four cards: today's meals (the next one highlighted by time of day; after 9pm it shows tomorrow), day by day (pick any of the next 7 days, or move a week at a time), going off (use-by food that's gone off or going off in 3 days, with Used it / Bin it, plus anything running low), and a shopping list for the next 7 days of planned meals that you can tick off as you shop (ticks are kept on that phone) and copy. Tap a dish to see its recipe while cooking.
 - **Storage places** – starts with Fridge, Freezer and Cupboard; add, rename or delete your own (e.g. "Garage freezer", "Spice rack").
 - **Food items** – for each item record which storage place it's in, when it goes off, how much is left (with a unit), and optionally the full amount so you get a "how much is left" bar.
 - **Food types** – each item has a type (Fruit & veg, Meat & fish, Dairy & eggs, Bread & bakery, Pasta, rice & grains, Tins & jars, Sauces, oils & spices, Baking, Snacks & sweets, Drinks, Other). It's filled in from the name as you type and can be changed; older items get a guessed type. Filter the food list by type, and the meal plan's shopping list is grouped by type.
