@@ -343,4 +343,12 @@
   });
 
   render();
+
+  // Offline support and asking the browser not to clear our saved data.
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().catch(() => {});
+  }
 })();

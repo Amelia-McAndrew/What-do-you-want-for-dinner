@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>What do you want for dinner?</title>
+  <meta name="theme-color" content="#2f7a4f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Dinner">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/favicon.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -53,7 +61,7 @@
     <footer class="data-tools">
       <button type="button" id="export-btn" class="btn btn-small">Export data</button>
       <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
-      <span class="muted">Your data is saved in this browser.</span>
+      <span class="muted">Your food list is saved on this device.</span>
     </footer>
   </main>
 

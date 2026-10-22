@@ -17,6 +17,13 @@ python3 -m http.server 8000
 # then visit http://localhost:8000
 ```
 
-It can also be hosted for free with GitHub Pages (Settings → Pages → deploy from branch).
+## Installing it on your phone
 
-Data is saved in your browser's local storage, so it stays on the device you use. Use **Export data** / **Import data** to back it up or move it to another device.
+The app is an installable web app (PWA): once installed it opens full screen from your home screen, works offline, and saves your food list on the phone.
+
+1. Host it with GitHub Pages: in the repo go to **Settings → Pages**, choose **Deploy from a branch**, pick the branch and `/ (root)`, and save. After a minute you get a link like `https://<username>.github.io/What-do-you-want-for-dinner/`.
+2. Open that link on your phone:
+   - **iPhone (Safari):** tap the Share button, then **Add to Home Screen**.
+   - **Android (Chrome):** tap the ⋮ menu, then **Install app** (or **Add to Home screen**).
+
+Data is saved on the device in the browser's local storage, so each phone or computer keeps its own list. Use **Export data** / **Import data** to back it up or move it to another device. Deleting the app from your home screen also deletes its saved data, so export a backup first.
