@@ -318,3 +318,14 @@ dialog { max-height: calc(100dvh - 32px); }
 .shopping-head h2 { margin: 0; flex: 1; }
 .shopping-list { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
 .shopping-list .for { color: var(--muted); font-size: 0.85rem; }
+
+/* Recipe import */
+.input-with-btn { display: flex; gap: 6px; margin-top: 4px; }
+.input-with-btn input { margin-top: 0; min-width: 0; flex: 1; }
+.import-text { margin-bottom: 12px; font-size: 0.9rem; border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; }
+.import-text summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.import-text[open] { display: flex; flex-direction: column; gap: 8px; }
+.import-text p { margin: 4px 0 0; }
+.import-text .btn { align-self: flex-start; }
+.source-link { font-size: 0.85rem; color: var(--accent); text-decoration: none; font-weight: 600; align-self: flex-start; }
+.source-link:hover { text-decoration: underline; }

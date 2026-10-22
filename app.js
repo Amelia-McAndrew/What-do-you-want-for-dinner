@@ -281,6 +281,48 @@
     for (const { recipe, stock } of list) container.append(renderRecipe(recipe, stock));
   }
 
+  function sourceLabel(url) {
+    let host;
+    try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return null; }
+    if (/(^|\.)pinterest\.|(^|\.)pin\.it$/.test(host)) return 'Pinterest';
+    if (/(^|\.)tiktok\.com$/.test(host)) return 'TikTok';
+    if (/(^|\.)instagram\.com$/.test(host)) return 'Instagram';
+    if (/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(host)) return 'YouTube';
+    return host;
+  }
+
+  function firstUrl(text) {
+    const match = (text || '').match(/https?:\/\/[^\s]+/);
+    return match ? match[0].replace(/[).,]+$/, '') : '';
+  }
+
+  // Turn pasted caption or recipe text into a name, ingredients and method.
+  function parseRecipeText(text) {
+    const clean = (l) => l.replace(/^[\s•●▪◦*·\-–—✔✅☑🔸🔹▶➡👉\uFE0F]+/u, '').trim();
+    const lines = text.split(/\r?\n/).map((l) => l.trim())
+      .filter((l) => l && !/^(#\w+\s*)+$/.test(l) && !/^https?:\/\//.test(l));
+    const isIngredientsHead = (l) => /^[^a-z0-9]*ingredients?\b[^a-z0-9]*:?\s*$/i.test(l);
+    const isMethodHead = (l) => /^[^a-z0-9]*(method|instructions|directions|steps|how to make( it)?|preparation)\b[^a-z0-9]*:?\s*$/i.test(l);
+    const looksLikeIngredient = (l) => /^[•●▪◦*·\-–—]/.test(l) ||
+      (/^[\d½¼¾⅓⅔]/.test(l) && !/^\d+[.)]\s/.test(l) && l.length <= 70);
+    const looksLikeStep = (l) => /^(step\s*)?\d+[.):]\s/i.test(l) || l.length > 70;
+
+    let name = '';
+    const ingredients = [];
+    const method = [];
+    let section = null;
+    for (const line of lines) {
+      if (isIngredientsHead(line)) { section = 'ingredients'; continue; }
+      if (isMethodHead(line)) { section = 'method'; continue; }
+      if (section === 'ingredients') ingredients.push(clean(line));
+      else if (section === 'method') method.push(line);
+      else if (!name && !looksLikeIngredient(line) && !looksLikeStep(line)) name = clean(line);
+      else if (looksLikeIngredient(line)) ingredients.push(clean(line));
+      else if (looksLikeStep(line)) method.push(line);
+    }
+    return { name: name.slice(0, 100), ingredients: ingredients.filter(Boolean), method: method.join('\n') };
+  }
+
   function renderRecipe(recipe, stock) {
     const allIn = stock.total > 0 && stock.have === stock.total;
     const ingredients = el('ul', { class: 'ingredients' }, stock.lines.map(({ line, item }) => {
@@ -298,9 +340,14 @@
       el('div', { class: 'recipe-meta' },
         el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
         recipe.time ? el('span', { class: 'badge' }, `⏱ ${timeText(recipe.time)}`) : null,
-        el('span', { class: `badge ${allIn ? 'have-all' : ''}` },
-          allIn ? 'You have everything' : `You have ${stock.have} of ${stock.total} ingredients`),
+        stock.total
+          ? el('span', { class: `badge ${allIn ? 'have-all' : ''}` },
+              allIn ? 'You have everything' : `You have ${stock.have} of ${stock.total} ingredients`)
+          : el('span', { class: 'badge' }, 'No ingredients added yet'),
       ),
+      recipe.source && sourceLabel(recipe.source)
+        ? el('a', { class: 'source-link', href: recipe.source, target: '_blank', rel: 'noopener' }, `Open on ${sourceLabel(recipe.source)} ↗`)
+        : null,
       el('details', {},
         el('summary', {}, recipe.method ? 'Ingredients and method' : 'Ingredients'),
         el('h4', {}, 'Ingredients'),
@@ -312,10 +359,13 @@
 
   const recipeDialog = $('#recipe-dialog');
 
-  function openRecipeDialog(recipe) {
+  function openRecipeDialog(recipe, shared) {
     $('#recipe-dialog-title').textContent = recipe ? 'Edit recipe' : 'Add recipe';
     $('#recipe-id').value = recipe?.id ?? '';
-    $('#recipe-name').value = recipe?.name ?? '';
+    $('#recipe-source').value = recipe?.source ?? shared?.url ?? '';
+    $('#recipe-paste-text').value = shared?.text ?? '';
+    $('#recipe-import').open = !!shared?.text;
+    $('#recipe-name').value = recipe?.name ?? shared?.name ?? '';
     $('#recipe-level').value = recipe?.difficulty ?? 'easy';
     $('#recipe-time').value = recipe?.time ?? '';
     $('#recipe-ingredients').value = recipe ? recipe.ingredients.join('\n') : '';
@@ -330,6 +380,7 @@
     const time = parseInt($('#recipe-time').value, 10);
     const fields = {
       name: $('#recipe-name').value.trim(),
+      source: firstUrl($('#recipe-source').value) || null,
       difficulty: $('#recipe-level').value,
       time: time > 0 ? time : null,
       ingredients: $('#recipe-ingredients').value.split('\n').map((l) => l.trim()).filter(Boolean),
@@ -360,6 +411,48 @@
   });
 
   $('#add-recipe-btn').addEventListener('click', () => openRecipeDialog(null));
+
+  $('#recipe-paste-link').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      $('#recipe-source').value = firstUrl(text) || text.trim();
+    } catch (e) {
+      $('#recipe-source').focus();
+      alert('Your browser blocked pasting. Press and hold in the Link box and choose Paste.');
+    }
+  });
+
+  $('#recipe-fill').addEventListener('click', () => {
+    const text = $('#recipe-paste-text').value;
+    if (!text.trim()) { $('#recipe-paste-text').focus(); return; }
+    const parsed = parseRecipeText(text);
+    if (!$('#recipe-source').value) $('#recipe-source').value = firstUrl(text);
+    if (parsed.name && !$('#recipe-name').value.trim()) $('#recipe-name').value = parsed.name;
+    if (parsed.ingredients.length) $('#recipe-ingredients').value = parsed.ingredients.join('\n');
+    if (parsed.method) $('#recipe-method').value = parsed.method;
+    if (!parsed.ingredients.length && !parsed.method) {
+      alert("Couldn't find ingredients or steps in that text. You can still type them in below.");
+      return;
+    }
+    $('#recipe-import').open = false;
+    $('#recipe-name').focus();
+  });
+
+  // Opened from the phone's share menu: start a new recipe with what was shared.
+  function handleShare() {
+    const params = new URLSearchParams(location.search);
+    const title = params.get('title') || '';
+    const text = params.get('text') || '';
+    const url = params.get('url') || firstUrl(text) || firstUrl(title);
+    if (!url && !text) return;
+    history.replaceState(null, '', location.pathname);
+    const extra = text.replace(url, '').trim();
+    const short = extra.length <= 60 && !extra.includes('\n');
+    let name = title && !/^https?:\/\//.test(title) ? title.trim() : '';
+    if (!name && short) name = extra;
+    showTab('recipes');
+    openRecipeDialog(null, { url, name, text: short ? '' : extra });
+  }
   $('#recipe-search').addEventListener('input', renderRecipes);
   $('#recipe-difficulty').addEventListener('change', renderRecipes);
   $('#recipe-sort').addEventListener('change', renderRecipes);
@@ -661,6 +754,7 @@
   });
 
   render();
+  handleShare();
 
   // Offline support and asking the browser not to clear our saved data.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

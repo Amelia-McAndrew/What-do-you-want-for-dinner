@@ -164,6 +164,18 @@
     <form id="recipe-form" method="dialog">
       <h2 id="recipe-dialog-title">Add recipe</h2>
       <input type="hidden" id="recipe-id">
+      <label>Link <span class="muted">(Pinterest, TikTok or a website – optional)</span>
+        <span class="input-with-btn">
+          <input type="url" id="recipe-source" inputmode="url" placeholder="Paste a link">
+          <button type="button" class="btn" id="recipe-paste-link">Paste</button>
+        </span>
+      </label>
+      <details class="import-text" id="recipe-import">
+        <summary>Paste the recipe text to fill this in</summary>
+        <p class="muted">Copy the caption from TikTok or the recipe from the Pinterest page, paste it here, and the ingredients and method will be filled in for you.</p>
+        <textarea id="recipe-paste-text" rows="5" aria-label="Recipe text to import" placeholder="Ingredients&#10;- 2 chicken breasts&#10;- 1 tbsp honey&#10;Method&#10;1. Mix the sauce…"></textarea>
+        <button type="button" class="btn btn-small" id="recipe-fill">Fill in from text</button>
+      </details>
       <label>Recipe name
         <input type="text" id="recipe-name" required placeholder="e.g. Chicken stir fry">
       </label>
@@ -180,7 +192,7 @@
         </label>
       </div>
       <label>Ingredients <span class="muted">(one per line)</span>
-        <textarea id="recipe-ingredients" rows="6" required placeholder="4 chicken thighs&#10;1 pepper&#10;200g noodles&#10;Soy sauce"></textarea>
+        <textarea id="recipe-ingredients" rows="6" placeholder="4 chicken thighs&#10;1 pepper&#10;200g noodles&#10;Soy sauce"></textarea>
       </label>
       <label>Method <span class="muted">(optional)</span>
         <textarea id="recipe-method" rows="6" placeholder="1. Slice the chicken…"></textarea>
