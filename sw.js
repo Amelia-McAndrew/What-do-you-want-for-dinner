@@ -1,5 +1,5 @@
 // Caches the app so it opens without a connection. Bump CACHE when files change.
-const CACHE = 'dinner-v4';
+const CACHE = 'dinner-v5';
 const FILES = [
   './',
   'index.html',
@@ -10,6 +10,7 @@ const FILES = [
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
   'icons/favicon.png',
+  'vendor/anthropic-sdk.mjs',
 ];
 
 self.addEventListener('install', (event) => {
@@ -26,11 +27,11 @@ self.addEventListener('activate', (event) => {
 
 // Network first so updates show up when online; fall back to the cache offline.
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {
-        if (res.ok && new URL(event.request.url).origin === location.origin) {
+        if (res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         }

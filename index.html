@@ -112,6 +112,7 @@
     </div>
 
     <footer class="data-tools">
+      <button type="button" id="ai-settings-btn" class="btn btn-small">✨ AI recipe writer</button>
       <button type="button" id="export-btn" class="btn btn-small">Export data</button>
       <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
       <span class="muted">Everything is saved on this device.</span>
@@ -170,6 +171,10 @@
           <button type="button" class="btn" id="recipe-paste-link">Paste</button>
         </span>
       </label>
+      <div class="ai-row">
+        <button type="button" class="btn btn-ai" id="recipe-ai">✨ Write the recipe for me</button>
+        <p id="recipe-ai-status" class="ai-status" role="status" hidden></p>
+      </div>
       <details class="import-text" id="recipe-import">
         <summary>Paste the recipe text to fill this in</summary>
         <p class="muted">Copy the caption from TikTok or the recipe from the Pinterest page, paste it here, and the ingredients and method will be filled in for you.</p>
@@ -199,6 +204,25 @@
       </label>
       <div class="dialog-actions">
         <button type="button" class="btn btn-danger" id="recipe-delete">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- AI settings dialog -->
+  <dialog id="ai-dialog">
+    <form id="ai-form" method="dialog">
+      <h2>AI recipe writer</h2>
+      <p>Share a TikTok or Pinterest link and Claude reads the post (its caption and any recipe page it links to) and writes the recipe out for you.</p>
+      <p class="muted">It needs your own Anthropic API key. Create one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>, add some credit, and paste it below. Each recipe usually costs a few pence. The key is kept only on this device and isn't included in exports.</p>
+      <label>API key
+        <input type="password" id="ai-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+      </label>
+      <p id="ai-key-state" class="muted"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="ai-key-remove">Remove key</button>
         <span class="spacer"></span>
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>
