@@ -1,5 +1,5 @@
 // Caches the app so it opens without a connection. Bump CACHE when files change.
-const CACHE = 'dinner-v5';
+const CACHE = 'dinner-v6';
 const FILES = [
   './',
   'index.html',
@@ -10,7 +10,6 @@ const FILES = [
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
   'icons/favicon.png',
-  'vendor/anthropic-sdk.mjs',
 ];
 
 self.addEventListener('install', (event) => {

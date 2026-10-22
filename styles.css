@@ -333,8 +333,7 @@ dialog { max-height: calc(100dvh - 32px); }
 /* AI recipe writer */
 .ai-row { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 12px; }
 .btn-ai { align-self: flex-start; border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.btn-ai:disabled { opacity: 0.6; cursor: progress; }
 .ai-status { margin: 0; font-size: 0.85rem; padding: 8px 10px; border-radius: 8px; background: var(--low-bg); color: var(--text); }
-.ai-status.error { background: var(--bad-bg); color: var(--bad); }
-.ai-status.done { background: var(--warn-bg); }
-dialog a { color: var(--accent); }
+.ai-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ai-buttons a { text-decoration: none; }
+.ai-hint { margin: 0; font-size: 0.82rem; }

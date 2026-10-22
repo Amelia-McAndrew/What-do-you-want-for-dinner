@@ -300,7 +300,9 @@
   function parseRecipeText(text) {
     const clean = (l) => l.replace(/^[\s•●▪◦*·\-–—✔✅☑🔸🔹▶➡👉\uFE0F]+/u, '').trim();
     const lines = text.split(/\r?\n/).map((l) => l.trim())
-      .filter((l) => l && !/^(#\w+\s*)+$/.test(l) && !/^https?:\/\//.test(l));
+      .filter((l) => l && !/^(#\w+\s*)+$/.test(l) && !/^https?:\/\//.test(l))
+      .map((l) => l.replace(/\*\*|__|`/g, '').replace(/^#+\s*/, '').trim())
+      .filter(Boolean);
     const isIngredientsHead = (l) => /^[^a-z0-9]*ingredients?\b[^a-z0-9]*:?\s*$/i.test(l);
     const isMethodHead = (l) => /^[^a-z0-9]*(method|instructions|directions|steps|how to make( it)?|preparation)\b[^a-z0-9]*:?\s*$/i.test(l);
     const looksLikeIngredient = (l) => /^[•●▪◦*·\-–—]/.test(l) ||
@@ -308,10 +310,21 @@
     const looksLikeStep = (l) => /^(step\s*)?\d+[.):]\s/i.test(l) || l.length > 70;
 
     let name = '';
+    let labelledName = false;
+    let difficulty = null;
+    let time = null;
     const ingredients = [];
     const method = [];
     let section = null;
     for (const line of lines) {
+      const label = line.match(/^(name|recipe|difficulty|(?:total\s+)?time)\s*:\s*(.+)$/i);
+      if (label && section !== 'method') {
+        const key = label[1].toLowerCase();
+        if (key === 'name' || key === 'recipe') { name = clean(label[2]); labelledName = true; }
+        else if (key === 'difficulty') difficulty = (label[2].match(/easy|medium|hard/i) || [''])[0].toLowerCase() || null;
+        else time = parseMinutes(label[2]);
+        continue;
+      }
       if (isIngredientsHead(line)) { section = 'ingredients'; continue; }
       if (isMethodHead(line)) { section = 'method'; continue; }
       if (section === 'ingredients') ingredients.push(clean(line));
@@ -320,7 +333,16 @@
       else if (looksLikeIngredient(line)) ingredients.push(clean(line));
       else if (looksLikeStep(line)) method.push(line);
     }
-    return { name: name.slice(0, 100), ingredients: ingredients.filter(Boolean), method: method.join('\n') };
+    return { name: name.slice(0, 100), labelledName, difficulty, time, ingredients: ingredients.filter(Boolean), method: method.join('\n') };
+  }
+
+  // "1 hr 30 min", "45 minutes", "1.5 hours" -> minutes.
+  function parseMinutes(text) {
+    const hours = text.match(/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours)\b/i);
+    const mins = text.match(/(\d+)\s*(m|min|mins|minute|minutes)\b/i);
+    let total = (hours ? parseFloat(hours[1]) * 60 : 0) + (mins ? parseInt(mins[1], 10) : 0);
+    if (!hours && !mins) total = parseInt(text, 10) || 0;
+    return total > 0 ? Math.round(total) : null;
   }
 
   function renderRecipe(recipe, stock) {
@@ -365,7 +387,7 @@
     $('#recipe-source').value = recipe?.source ?? shared?.url ?? '';
     $('#recipe-paste-text').value = shared?.text ?? '';
     $('#recipe-import').open = !!shared?.text;
-    setAiStatus('');
+    setClaudeStatus('');
     $('#recipe-name').value = recipe?.name ?? shared?.name ?? '';
     $('#recipe-level').value = recipe?.difficulty ?? 'easy';
     $('#recipe-time').value = recipe?.time ?? '';
@@ -428,7 +450,9 @@
     if (!text.trim()) { $('#recipe-paste-text').focus(); return; }
     const parsed = parseRecipeText(text);
     if (!$('#recipe-source').value) $('#recipe-source').value = firstUrl(text);
-    if (parsed.name && !$('#recipe-name').value.trim()) $('#recipe-name').value = parsed.name;
+    if (parsed.name && (parsed.labelledName || !$('#recipe-name').value.trim())) $('#recipe-name').value = parsed.name;
+    if (parsed.difficulty) $('#recipe-level').value = parsed.difficulty;
+    if (parsed.time) $('#recipe-time').value = parsed.time;
     if (parsed.ingredients.length) $('#recipe-ingredients').value = parsed.ingredients.join('\n');
     if (parsed.method) $('#recipe-method').value = parsed.method;
     if (!parsed.ingredients.length && !parsed.method) {
@@ -436,188 +460,57 @@
       return;
     }
     $('#recipe-import').open = false;
+    setClaudeStatus('');
     $('#recipe-name').focus();
   });
 
-  // ---------- AI recipe writer ----------
+  // ---------- Ask Claude (free, through the Claude app) ----------
 
-  const AI_KEY = 'wdywfd-anthropic-key';
-  const AI_MODEL = 'claude-opus-5-5';
-
-  function getApiKey() {
-    try { return localStorage.getItem(AI_KEY) || ''; } catch (e) { return ''; }
-  }
-
-  const aiDialog = $('#ai-dialog');
-
-  function openAiSettings() {
-    const key = getApiKey();
-    $('#ai-key').value = '';
-    $('#ai-key-state').textContent = key ? `A key ending in …${key.slice(-4)} is saved on this device.` : 'No key saved yet.';
-    $('#ai-key-remove').hidden = !key;
-    aiDialog.showModal();
-    $('#ai-key').focus();
-  }
-
-  $('#ai-settings-btn').addEventListener('click', openAiSettings);
-  $('#ai-form').addEventListener('submit', () => {
-    const key = $('#ai-key').value.trim();
-    if (!key) return;
-    try { localStorage.setItem(AI_KEY, key); } catch (e) { alert("Couldn't save the key on this device."); }
-  });
-  $('#ai-key-remove').addEventListener('click', () => {
-    try { localStorage.removeItem(AI_KEY); } catch (e) { /* storage unavailable */ }
-    aiDialog.close();
-  });
-
-  const RECIPE_SCHEMA = {
-    type: 'object',
-    properties: {
-      found: { type: 'boolean', description: 'True if the actual recipe from the post (or a page it links to) was found.' },
-      name: { type: 'string' },
-      difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
-      time_minutes: { type: 'integer', description: 'Total time in minutes, or 0 if unknown.' },
-      ingredients: { type: 'array', items: { type: 'string' } },
-      method: { type: 'array', items: { type: 'string' } },
-      note: { type: 'string', description: 'One short sentence for the cook about where this recipe came from.' },
-    },
-    required: ['found', 'name', 'difficulty', 'time_minutes', 'ingredients', 'method', 'note'],
-    additionalProperties: false,
-  };
-
-  const AI_SYSTEM = `You write recipe cards for a home cook's meal-planning app from recipe posts they share, usually TikTok videos or Pinterest pins.
-
-Find the real recipe first. Fetch the shared link. For TikTok, also fetch the oEmbed URL given, which returns the video's caption and creator. Captions often list the ingredients and steps, or point to the creator's website or another page; follow those with web fetch or web search to get the full recipe. For Pinterest, the pin usually links to a recipe page; fetch that.
-
-If you can't find the creator's actual recipe, write a dependable recipe for the dish the post shows, based on its title and caption, set "found" to false, and say so in "note".
-
-Write for a UK home cook. Each ingredient is one plain line with the amount first, like "2 chicken breasts" or "1 tbsp honey"; prefer grams, ml and spoons, and keep the source's amounts. Each method step is one clear instruction without a step number. Give the total time in minutes, and rate difficulty as easy, medium or hard. Keep "note" to one sentence, for example "From @creator's caption" or "Written from the video title; the creator didn't share exact amounts."`;
-
-  function setAiStatus(text, kind) {
-    const box = $('#recipe-ai-status');
+  function setClaudeStatus(text) {
+    const box = $('#recipe-claude-status');
     box.textContent = text;
-    box.className = `ai-status ${kind || ''}`;
     box.hidden = !text;
   }
 
-  // TikTok's public embed info gives the video caption. Browsers may block it; Claude can fetch it too.
-  async function tiktokCaption(url) {
-    if (sourceLabel(url) !== 'TikTok') return null;
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, { signal: controller.signal });
-      clearTimeout(timer);
-      if (!res.ok) return null;
-      const info = await res.json();
-      return info.title ? { caption: info.title, author: info.author_name || '' } : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function aiErrorMessage(err, Anthropic) {
-    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-      return 'Your API key wasn’t accepted. Check it in ✨ AI recipe writer at the bottom of the page.';
-    }
-    if (err instanceof Anthropic.RateLimitError) return 'Claude is busy right now. Wait a minute and try again.';
-    if (err instanceof Anthropic.APIConnectionError) return 'Couldn’t reach Claude. Check you have signal and try again.';
-    if (err instanceof Anthropic.APIError && /credit|billing/i.test(err.message)) {
-      return 'Your Anthropic account is out of credit. Add some at console.anthropic.com and try again.';
-    }
-    return `Something went wrong writing the recipe (${err.message || err}). You can try again or fill it in yourself.`;
-  }
-
-  let aiBusy = false;
-
-  async function writeRecipeWithAI() {
-    if (aiBusy) return;
+  function claudeRequest() {
     const url = firstUrl($('#recipe-source').value);
+    const name = $('#recipe-name').value.trim();
     const pasted = $('#recipe-paste-text').value.trim();
-    const typedName = $('#recipe-name').value.trim();
-    if (!url && !pasted && !typedName) {
-      setAiStatus('Add a link first (or paste the caption), then tap Write the recipe for me.', 'error');
+    const parts = ['Please write this up as a recipe for my recipe app.'];
+    if (url) parts.push(`Link: ${url}`);
+    if (name) parts.push(`Title: ${name}`);
+    if (pasted) parts.push(`Caption / text from the post:\n${pasted}`);
+    parts.push(`Find the creator's actual recipe if you can (the caption, or a recipe page the post links to). If you can't, write a reliable version of the dish and tell me in one line after the method. Use UK measurements (grams, ml, spoons).
+
+Reply with only the recipe in exactly this layout, as plain text with no bold, headings or intro:
+
+Name: <recipe name>
+Difficulty: <Easy, Medium or Hard>
+Time: <total minutes> minutes
+Ingredients:
+- <amount and ingredient>
+Method:
+1. <step>`);
+    return parts.join('\n\n');
+  }
+
+  $('#recipe-claude').addEventListener('click', async () => {
+    const url = firstUrl($('#recipe-source').value);
+    if (!url && !$('#recipe-name').value.trim() && !$('#recipe-paste-text').value.trim()) {
+      setClaudeStatus('Add the link first (or the recipe name or caption), then tap Copy for Claude.');
       $('#recipe-source').focus();
       return;
     }
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setAiStatus('To use this, add your Anthropic API key first.', 'error');
-      openAiSettings();
-      return;
-    }
-
-    aiBusy = true;
-    const button = $('#recipe-ai');
-    button.disabled = true;
-    button.textContent = '✨ Writing…';
-    setAiStatus('Reading the post and writing your recipe. This can take up to a minute.');
-
-    let Anthropic;
+    const text = claudeRequest();
     try {
-      ({ default: Anthropic } = await import('./vendor/anthropic-sdk.mjs'));
-      const tiktok = url ? await tiktokCaption(url) : null;
-
-      const lines = [];
-      if (url) lines.push(`Shared link: ${url}`);
-      if (url && sourceLabel(url) === 'TikTok') lines.push(`TikTok oEmbed URL: https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
-      if (tiktok) lines.push(`Video caption by ${tiktok.author || 'the creator'}:\n${tiktok.caption}`);
-      if (typedName) lines.push(`Title or caption the cook already has: ${typedName}`);
-      if (pasted) lines.push(`Text the cook pasted from the post:\n${pasted}`);
-      lines.push('Write the recipe card.');
-
-      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-      const userMessage = { role: 'user', content: lines.join('\n\n') };
-      const messages = [userMessage];
-      let response;
-      // Server-side web tools can pause a long turn; resend to let it carry on.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        response = await client.beta.messages.create({
-          model: AI_MODEL,
-          max_tokens: 16000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default',
-          system: AI_SYSTEM,
-          messages,
-          tools: [
-            { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6 },
-            { type: 'web_search_20260209', name: 'web_search', max_uses: 4 },
-          ],
-          output_config: { effort: 'medium', format: { type: 'json_schema', schema: RECIPE_SCHEMA } },
-        });
-        if (response.stop_reason !== 'pause_turn') break;
-        const soFar = messages[1] ? messages[1].content : [];
-        messages[1] = { role: 'assistant', content: [...soFar, ...response.content] };
-      }
-
-      if (response.stop_reason === 'refusal') {
-        throw new Error('Claude declined to write this one');
-      }
-      if (response.stop_reason === 'max_tokens' || response.stop_reason === 'pause_turn') {
-        throw new Error('the recipe took too long to write');
-      }
-      const texts = response.content.filter((b) => b.type === 'text');
-      const recipe = JSON.parse(texts[texts.length - 1]?.text || '');
-
-      if (!$('#recipe-name').value.trim() || $('#recipe-name').value.trim() === typedName) {
-        $('#recipe-name').value = recipe.name;
-      }
-      $('#recipe-level').value = DIFFICULTY[recipe.difficulty] ? recipe.difficulty : 'medium';
-      $('#recipe-time').value = recipe.time_minutes > 0 ? recipe.time_minutes : '';
-      $('#recipe-ingredients').value = recipe.ingredients.join('\n');
-      $('#recipe-method').value = recipe.method.map((step, i) => `${i + 1}. ${step.replace(/^\d+[.)]\s*/, '')}`).join('\n');
-      $('#recipe-import').open = false;
-      setAiStatus(`${recipe.note} Check it over, then tap Save.`, 'done');
-    } catch (err) {
-      setAiStatus(Anthropic ? aiErrorMessage(err, Anthropic) : 'Couldn’t load the recipe writer. Check you have signal and try again.', 'error');
-    } finally {
-      aiBusy = false;
-      button.disabled = false;
-      button.textContent = '✨ Write the recipe for me';
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      prompt('Copy this, then paste it into Claude:', text);
     }
-  }
-
-  $('#recipe-ai').addEventListener('click', writeRecipeWithAI);
+    $('#recipe-paste-text').value = '';
+    $('#recipe-import').open = true;
+    setClaudeStatus('Copied. Open Claude, paste and send. Then copy Claude’s reply, paste it in the box below and tap Fill in from text.');
+  });
 
   // Opened from the phone's share menu: start a new recipe with what was shared.
   function handleShare() {
@@ -633,7 +526,6 @@ Write for a UK home cook. Each ingredient is one plain line with the amount firs
     if (!name && short) name = extra;
     showTab('recipes');
     openRecipeDialog(null, { url, name, text: short ? '' : extra });
-    if (url && getApiKey()) writeRecipeWithAI();
   }
   $('#recipe-search').addEventListener('input', renderRecipes);
   $('#recipe-difficulty').addEventListener('change', renderRecipes);
