@@ -1,10 +1,10 @@
 // Caches the app so it opens without a connection. Bump CACHE when files change.
-const CACHE = 'dinner-v6';
+const CACHE = 'dinner-v7';
 const FILES = [
   './',
   'index.html',
-  'styles.css',
-  'app.js',
+  'styles.css?v=7',
+  'app.js?v=7',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -25,10 +25,11 @@ self.addEventListener('activate', (event) => {
 });
 
 // Network first so updates show up when online; fall back to the cache offline.
+// 'no-cache' makes the browser check with the server instead of reusing an old copy.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== location.origin) return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request.url, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

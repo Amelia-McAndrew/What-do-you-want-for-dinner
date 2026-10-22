@@ -35,7 +35,7 @@
         }
       }
     } catch (e) { /* fall through to defaults */ }
-    return structuredClone(DEFAULT_DATA);
+    return JSON.parse(JSON.stringify(DEFAULT_DATA));
   }
 
   function save() {
@@ -832,7 +832,7 @@ Method:
 
   // Offline support and asking the browser not to clear our saved data.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
   }
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persist().catch(() => {});

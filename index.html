@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <header class="site-header">
@@ -234,6 +234,15 @@
     </form>
   </dialog>
 
-  <script src="app.js"></script>
+  <div id="load-error" class="load-error" role="alert" hidden></div>
+  <script>
+    // If anything goes wrong while the app starts, say so on screen instead of failing silently.
+    window.addEventListener('error', function (e) {
+      var box = document.getElementById('load-error');
+      box.textContent = 'Something went wrong in the app: ' + (e.message || 'unknown error') + '. Try closing and reopening it.';
+      box.hidden = false;
+    });
+  </script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
