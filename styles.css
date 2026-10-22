@@ -503,3 +503,7 @@ dialog { max-height: calc(100dvh - 32px); }
 .dish-name { font-weight: 600; overflow-wrap: anywhere; }
 .dish-remove { flex: none; }
 .dish-picker.more { color: var(--accent); font-weight: 600; }
+
+/* Best before dates */
+.badge.best { color: var(--muted); border-style: dashed; }
+.date-hint { margin: -6px 0 12px; }

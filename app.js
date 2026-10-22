@@ -139,18 +139,35 @@
     return Math.round((target - today()) / 86400000);
   }
 
+  // "Use by" is about safety, so it warns; "best before" is only about quality, so it doesn't.
+  // Items saved before this choice existed count as use by.
+  const isBestBefore = (item) => item.dateKind === 'best';
+  const USE_BY_TYPES = ['meat', 'dairy'];
+  const defaultDateKind = (type) => (USE_BY_TYPES.includes(type) ? 'useby' : 'best');
+
+  // Days until a use-by date, or null when there's nothing to warn about.
+  function warnDays(item) {
+    return isBestBefore(item) ? null : daysUntil(item.expiry);
+  }
+
+  function shortDate(iso) {
+    const date = new Date(iso + 'T00:00:00');
+    const opts = { day: 'numeric', month: 'short' };
+    if (date.getFullYear() !== today().getFullYear()) opts.year = 'numeric';
+    return date.toLocaleDateString(undefined, opts);
+  }
+
   function expiryInfo(item) {
     const days = daysUntil(item.expiry);
     if (days === null) return { days: null, cls: '', text: 'No date' };
+    if (isBestBefore(item)) {
+      return { days, cls: 'best', text: days < 0 ? `Past best before (${shortDate(item.expiry)})` : `Best before ${shortDate(item.expiry)}` };
+    }
     if (days < 0) return { days, cls: 'bad', text: `Gone off ${-days} day${days === -1 ? '' : 's'} ago` };
     if (days === 0) return { days, cls: 'bad', text: 'Goes off today' };
     if (days === 1) return { days, cls: 'warn', text: 'Goes off tomorrow' };
     if (days <= SOON_DAYS) return { days, cls: 'warn', text: `Goes off in ${days} days` };
-    const date = new Date(item.expiry + 'T00:00:00');
-    const opts = { day: 'numeric', month: 'short' };
-    if (date.getFullYear() !== today().getFullYear()) opts.year = 'numeric';
-    const label = date.toLocaleDateString(undefined, opts);
-    return { days, cls: 'ok', text: `Use by ${label}` };
+    return { days, cls: 'ok', text: `Use by ${shortDate(item.expiry)}` };
   }
 
   function fmtNum(n) {
@@ -182,7 +199,12 @@
       const key = (i) => leftRatio(i) ?? (i.qty > 0 ? 1 : 0);
       copy.sort((a, b) => key(a) - key(b));
     } else {
-      const key = (i) => { const d = daysUntil(i.expiry); return d === null ? Infinity : d; };
+      // Use-by dates first, then best-before dates, then undated items.
+      const key = (i) => {
+        const d = daysUntil(i.expiry);
+        if (d === null) return Infinity;
+        return isBestBefore(i) ? 100000 + d : d;
+      };
       copy.sort((a, b) => key(a) - key(b) || a.name.localeCompare(b.name));
     }
     return copy;
@@ -203,7 +225,7 @@
   function renderStats() {
     let soon = 0, expired = 0, low = 0;
     for (const item of data.items) {
-      const d = daysUntil(item.expiry);
+      const d = warnDays(item);
       if (d !== null && d < 0) expired++;
       else if (d !== null && d <= SOON_DAYS) soon++;
       if (isLow(item)) low++;
@@ -218,7 +240,7 @@
     const list = $('#use-first');
     list.replaceChildren();
     const urgent = data.items
-      .map((item) => ({ item, days: daysUntil(item.expiry) }))
+      .map((item) => ({ item, days: warnDays(item) }))
       .filter((x) => x.days !== null && x.days <= SOON_DAYS)
       .sort((a, b) => a.days - b.days);
     for (const { item, days } of urgent) {
@@ -303,7 +325,7 @@
       return full.includes(food) || food.includes(name);
     });
     if (!matches.length) return null;
-    return matches.find((i) => { const d = daysUntil(i.expiry); return d === null || d >= 0; }) || matches[0];
+    return matches.find((i) => { const d = warnDays(i); return d === null || d >= 0; }) || matches[0];
   }
 
   function recipeStock(recipe) {
@@ -418,7 +440,7 @@
   function renderRecipe(recipe, stock) {
     const allIn = stock.total > 0 && stock.have === stock.total;
     const ingredients = el('ul', { class: 'ingredients' }, stock.lines.map(({ line, item }) => {
-      const off = item && daysUntil(item.expiry) !== null && daysUntil(item.expiry) < 0;
+      const off = item && warnDays(item) !== null && warnDays(item) < 0;
       return el('li', { class: item ? `have${off ? ' off' : ''}` : '', title: item ? `In stock: ${item.name}` : 'Not in stock' },
         el('span', { class: 'mark', 'aria-label': item ? 'In stock' : 'Not in stock' }, item ? '✓' : '○'),
         el('span', {}, line, off ? el('span', { class: 'muted' }, ' (gone off)') : null));
@@ -851,6 +873,9 @@ Method:
     $('#item-type').value = item ? typeOf(item) : 'other';
     $('#item-place').value = item?.placeId ?? placeId ?? data.places[0].id;
     $('#item-expiry').value = item?.expiry ?? '';
+    // A new item's date type follows its food type until the person picks one.
+    dateKindChosen = !!item;
+    $('#item-datekind').value = item ? (isBestBefore(item) ? 'best' : 'useby') : defaultDateKind($('#item-type').value);
     $('#item-qty').value = item ? fmtNum(item.qty) : '1';
     $('#item-unit').value = item?.unit ?? '';
     $('#item-full').value = item?.full ? fmtNum(item.full) : '';
@@ -862,9 +887,13 @@ Method:
 
   let typeChosen = false;
   $('#item-type').replaceChildren(...FOOD_TYPES.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)));
-  $('#item-type').addEventListener('change', () => { typeChosen = true; });
+  let dateKindChosen = false;
+  const followType = () => { if (!dateKindChosen) $('#item-datekind').value = defaultDateKind($('#item-type').value); };
+  $('#item-type').addEventListener('change', () => { typeChosen = true; followType(); });
+  $('#item-datekind').addEventListener('change', () => { dateKindChosen = true; });
   $('#item-name').addEventListener('input', () => {
     if (!typeChosen) $('#item-type').value = guessType($('#item-name').value);
+    followType();
   });
 
   $('#item-form').addEventListener('submit', () => {
@@ -875,6 +904,7 @@ Method:
       type: $('#item-type').value,
       placeId: $('#item-place').value,
       expiry: $('#item-expiry').value || null,
+      dateKind: $('#item-datekind').value,
       qty: Math.max(0, parseFloat($('#item-qty').value) || 0),
       unit: $('#item-unit').value.trim(),
       full: full > 0 ? full : null,

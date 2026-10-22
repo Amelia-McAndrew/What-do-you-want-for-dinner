@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
   <header class="site-header">
@@ -183,9 +183,18 @@
           <select id="item-place" required></select>
         </label>
       </div>
-      <label>Goes off on
-        <input type="date" id="item-expiry">
-      </label>
+      <div class="row">
+        <label>Date on the pack
+          <input type="date" id="item-expiry">
+        </label>
+        <label>Kind of date
+          <select id="item-datekind">
+            <option value="useby">Use by</option>
+            <option value="best">Best before</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted field-hint date-hint">Best before dates are only about quality, so they don't show up as warnings.</p>
       <div class="row">
         <label>Amount left
           <input type="number" id="item-qty" min="0" step="any" value="1">
@@ -381,8 +390,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=15"></script>
-  <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="avatars.js?v=16"></script>
+  <script src="firebase-config.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>
