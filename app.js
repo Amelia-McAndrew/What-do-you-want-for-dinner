@@ -916,7 +916,21 @@ Method:
     };
     $('#profile-photo-preview').replaceChildren(avatar(stand, 72));
     $('#profile-photo-remove').hidden = !stand.photo;
+    for (const btn of document.querySelectorAll('#avatar-picker button')) {
+      const chosen = btn.dataset.url === stand.photo;
+      btn.classList.toggle('selected', chosen);
+      btn.setAttribute('aria-pressed', String(chosen));
+    }
   }
+
+  // The built-in food characters (avatars.js), stored like any other photo once picked.
+  const CHARACTERS = window.DEFAULT_AVATARS || [];
+
+  $('#avatar-picker').replaceChildren(...CHARACTERS.map((c) =>
+    el('button', { type: 'button', class: 'avatar-option', 'data-url': c.url, title: c.name, 'aria-label': c.name, 'aria-pressed': 'false',
+      onclick: () => { pendingPhoto = c.url; showPhotoPreview(editingMember()); } },
+      el('img', { src: c.url, alt: '' }))));
+  $('#avatar-picker').hidden = CHARACTERS.length === 0;
 
   function openProfileForm(member) {
     $('#profile-dialog-title').textContent = member ? `Edit ${member.name}` : 'Add a person';
@@ -924,7 +938,8 @@ Method:
     $('#profile-name').value = member?.name ?? '';
     $('#profile-delete').hidden = !member;
     $('#profile-photo-status').hidden = true;
-    pendingPhoto = undefined;
+    // Someone new starts with a random character; they can pick another, a photo or initials.
+    pendingPhoto = member || !CHARACTERS.length ? undefined : CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)].url;
     showPhotoPreview(member);
     profileDialog.showModal();
     $('#profile-name').focus();

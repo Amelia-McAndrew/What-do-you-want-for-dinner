@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <header class="site-header">
@@ -279,10 +279,12 @@
       <div class="photo-row">
         <div id="profile-photo-preview"></div>
         <div class="photo-buttons">
-          <label class="btn btn-small">Choose photo<input type="file" id="profile-photo" accept="image/*" hidden></label>
-          <button type="button" class="btn btn-small btn-danger" id="profile-photo-remove">Remove photo</button>
+          <label class="btn btn-small">Use a photo<input type="file" id="profile-photo" accept="image/*" hidden></label>
+          <button type="button" class="btn btn-small" id="profile-photo-remove">Use initials</button>
         </div>
       </div>
+      <p class="muted picker-label">Or pick a character</p>
+      <div id="avatar-picker" class="avatar-picker" role="group" aria-label="Characters"></div>
       <p id="profile-photo-status" class="ai-status error" role="status" hidden></p>
       <label>Name
         <input type="text" id="profile-name" required maxlength="30" autocomplete="given-name" placeholder="e.g. Amelia">
@@ -325,7 +327,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="firebase-config.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <script src="avatars.js?v=11"></script>
+  <script src="firebase-config.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
