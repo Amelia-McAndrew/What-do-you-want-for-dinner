@@ -1,12 +1,12 @@
 // Caches the app so it opens without a connection. Bump CACHE when files change.
-const CACHE = 'dinner-v14';
+const CACHE = 'dinner-v15';
 const FILES = [
   './',
   'index.html',
-  'styles.css?v=14',
-  'avatars.js?v=14',
-  'firebase-config.js?v=14',
-  'app.js?v=14',
+  'styles.css?v=15',
+  'avatars.js?v=15',
+  'firebase-config.js?v=15',
+  'app.js?v=15',
   'vendor/firebase.mjs',
   'manifest.webmanifest',
   'icons/icon-192.png',

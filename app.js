@@ -18,6 +18,19 @@
   };
   const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner']];
   const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+
+  // What a recipe is: a whole meal on its own, or one part of a meal.
+  const KINDS = [
+    ['meal', '🍽️', 'Full meal', 'Full meals'],
+    ['main', '🍗', 'Main', 'Mains'],
+    ['side', '🥗', 'Side', 'Sides'],
+    ['sauce', '🥣', 'Sauce or dip', 'Sauces and dips'],
+    ['starter', '🥟', 'Starter', 'Starters'],
+    ['dessert', '🍰', 'Dessert', 'Desserts'],
+    ['drink', '🥤', 'Drink', 'Drinks'],
+  ];
+  const KIND_INFO = Object.fromEntries(KINDS.map(([id, icon, label, plural]) => [id, { icon, label, plural }]));
+  const kindOf = (recipe) => (KIND_INFO[recipe.course] ? recipe.course : 'meal');
   const TAB_KEY = 'wdywfd-tab';
 
   // Kinds of food, in rough supermarket order (used to group the shopping list).
@@ -309,11 +322,13 @@
     const container = $('#recipes');
     const query = $('#recipe-search').value.trim().toLowerCase();
     const level = $('#recipe-difficulty').value;
+    const kind = $('#recipe-kind').value;
     const sort = $('#recipe-sort').value;
     container.replaceChildren();
 
     let list = data.recipes
       .filter((r) => !level || r.difficulty === level)
+      .filter((r) => !kind || kindOf(r) === kind)
       .filter((r) => !query || r.name.toLowerCase().includes(query) ||
         r.ingredients.some((i) => i.toLowerCase().includes(query)))
       .map((r) => ({ recipe: r, stock: recipeStock(r) }));
@@ -415,6 +430,7 @@
         el('button', { type: 'button', class: 'btn btn-icon', title: 'Edit recipe', 'aria-label': `Edit ${recipe.name}`, onclick: () => openRecipeDialog(recipe) }, '✎'),
       ),
       el('div', { class: 'recipe-meta' },
+        kindOf(recipe) !== 'meal' ? el('span', { class: 'badge kind-badge' }, `${KIND_INFO[kindOf(recipe)].icon} ${KIND_INFO[kindOf(recipe)].label}`) : null,
         el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
         recipe.time ? el('span', { class: 'badge' }, `⏱ ${timeText(recipe.time)}`) : null,
         stock.total
@@ -445,6 +461,7 @@
     setClaudeStatus('');
     $('#recipe-name').value = recipe?.name ?? shared?.name ?? '';
     $('#recipe-level').value = recipe?.difficulty ?? 'easy';
+    $('#recipe-course').value = recipe ? kindOf(recipe) : 'meal';
     $('#recipe-time').value = recipe?.time ?? '';
     $('#recipe-ingredients').value = recipe ? recipe.ingredients.join('\n') : '';
     $('#recipe-method').value = recipe?.method ?? '';
@@ -460,6 +477,7 @@
       name: $('#recipe-name').value.trim(),
       source: firstUrl($('#recipe-source').value) || null,
       difficulty: $('#recipe-level').value,
+      course: $('#recipe-course').value,
       time: time > 0 ? time : null,
       ingredients: $('#recipe-ingredients').value.split('\n').map((l) => l.trim()).filter(Boolean),
       method: $('#recipe-method').value.trim(),
@@ -478,8 +496,13 @@
     const recipe = data.recipes.find((r) => r.id === id);
     if (recipe && confirm(`Delete the ${recipe.name} recipe?`)) {
       data.recipes = data.recipes.filter((r) => r.id !== id);
-      for (const day of Object.values(data.plan)) {
-        for (const meal of Object.keys(day)) if (day[meal] === id) delete day[meal];
+      for (const [date, day] of Object.entries(data.plan)) {
+        for (const meal of Object.keys(day)) {
+          const left = slotIds(day, meal).filter((x) => x !== id);
+          if (left.length) day[meal] = left;
+          else delete day[meal];
+        }
+        if (!Object.keys(day).length) delete data.plan[date];
       }
       save();
       renderRecipes();
@@ -584,6 +607,9 @@ Method:
   }
   $('#recipe-search').addEventListener('input', renderRecipes);
   $('#recipe-difficulty').addEventListener('change', renderRecipes);
+  $('#recipe-kind').append(...KINDS.map(([id, icon, , plural]) => el('option', { value: id }, `${icon} ${plural}`)));
+  $('#recipe-kind').addEventListener('change', renderRecipes);
+  $('#recipe-course').replaceChildren(...KINDS.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)));
   $('#recipe-sort').addEventListener('change', renderRecipes);
 
   // ---------- Meal plan ----------
@@ -616,25 +642,62 @@ Method:
     return thisWeek ? `This week · ${range}` : `Week of ${range}`;
   }
 
+  // A meal slot holds a list of recipe ids (a full meal, or several parts like a main and
+  // sides). Plans saved before this held a single id, which reads as a list of one.
+  function slotIds(day, meal) {
+    const value = day && day[meal];
+    return Array.isArray(value) ? value : value ? [value] : [];
+  }
+
   function plannedRecipes() {
     const list = [];
     for (const d of weekDays()) {
       const day = data.plan[isoDate(d)] || {};
       for (const [meal] of MEALS) {
-        const recipe = data.recipes.find((r) => r.id === day[meal]);
-        if (recipe) list.push(recipe);
+        for (const id of slotIds(day, meal)) {
+          const recipe = data.recipes.find((r) => r.id === id);
+          if (recipe) list.push(recipe);
+        }
       }
     }
     return list;
   }
 
-  function setMeal(date, meal, recipeId) {
+  function setSlot(date, meal, ids) {
     const day = data.plan[date] || (data.plan[date] = {});
-    if (recipeId) day[meal] = recipeId;
+    if (ids.length) day[meal] = ids;
     else delete day[meal];
     if (!Object.keys(day).length) delete data.plan[date];
     save();
     renderPlan();
+  }
+
+  function addDish(date, meal, recipeId) {
+    const ids = slotIds(data.plan[date], meal);
+    if (recipeId && !ids.includes(recipeId)) setSlot(date, meal, [...ids, recipeId]);
+    else renderPlan();
+  }
+
+  function removeDish(date, meal, recipeId) {
+    setSlot(date, meal, slotIds(data.plan[date], meal).filter((id) => id !== recipeId));
+  }
+
+  // Picker of saved recipes, grouped by kind, leaving out what's already in the slot.
+  function dishPicker(id, chosenIds, onPick) {
+    const groups = KINDS.map(([kind, icon, , plural]) => {
+      const options = data.recipes.filter((r) => kindOf(r) === kind && !chosenIds.includes(r.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return options.length
+        ? el('optgroup', { label: `${icon} ${plural}` }, options.map((r) => el('option', { value: r.id }, r.name)))
+        : null;
+    }).filter(Boolean);
+    const placeholder = !data.recipes.length ? 'No recipes saved'
+      : chosenIds.length ? '+ Add another part…' : 'Choose a meal…';
+    const select = el('select', { id, class: `dish-picker ${chosenIds.length ? 'more' : 'empty'}`, onchange: (e) => onPick(e.target.value) },
+      el('option', { value: '' }, placeholder), groups);
+    select.value = '';
+    if (!groups.length && chosenIds.length) select.hidden = true;
+    return select;
   }
 
   function renderPlan() {
@@ -650,20 +713,25 @@ Method:
       const day = data.plan[date] || {};
       const slots = MEALS.map(([meal, label]) => {
         const id = `plan-${date}-${meal}`;
-        const chosen = recipes.find((r) => r.id === day[meal]);
-        const select = el('select', { id, class: chosen ? '' : 'empty', onchange: (e) => setMeal(date, meal, e.target.value) },
-          el('option', { value: '' }, recipes.length ? 'Choose a meal…' : 'No recipes saved'),
-          recipes.map((r) => el('option', { value: r.id }, r.name)));
-        select.value = chosen ? chosen.id : '';
-        let meta = null;
-        if (chosen) {
-          const stock = recipeStock(chosen);
-          meta = el('div', { class: 'slot-meta' },
-            el('span', { class: `badge ${chosen.difficulty}` }, DIFFICULTY[chosen.difficulty]),
-            chosen.time ? el('span', { class: 'badge' }, `⏱ ${timeText(chosen.time)}`) : null,
-            stock.total ? el('span', { class: `badge ${stock.have === stock.total ? 'have-all' : ''}` }, `${stock.have}/${stock.total} in stock`) : null);
-        }
-        return el('div', { class: 'slot' }, el('label', { for: id }, label), select, meta);
+        const chosenIds = slotIds(day, meal).filter((rid) => recipes.some((r) => r.id === rid));
+        const dishes = chosenIds.map((rid) => {
+          const recipe = recipes.find((r) => r.id === rid);
+          const stock = recipeStock(recipe);
+          const kind = kindOf(recipe);
+          return el('li', { class: 'dish' },
+            el('div', { class: 'dish-main' },
+              el('span', { class: 'dish-name' }, recipe.name),
+              el('div', { class: 'slot-meta' },
+                kind !== 'meal' ? el('span', { class: 'badge kind-badge' }, `${KIND_INFO[kind].icon} ${KIND_INFO[kind].label}`) : null,
+                el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
+                recipe.time ? el('span', { class: 'badge' }, `⏱ ${timeText(recipe.time)}`) : null,
+                stock.total ? el('span', { class: `badge ${stock.have === stock.total ? 'have-all' : ''}` }, `${stock.have}/${stock.total} in stock`) : null)),
+            el('button', { type: 'button', class: 'btn btn-icon dish-remove', title: `Remove ${recipe.name}`, 'aria-label': `Remove ${recipe.name} from ${label.toLowerCase()}`, onclick: () => removeDish(date, meal, rid) }, '×'));
+        });
+        return el('div', { class: 'slot' },
+          el('label', { for: id }, label),
+          dishes.length ? el('ul', { class: 'dishes' }, dishes) : null,
+          dishPicker(id, chosenIds, (rid) => addDish(date, meal, rid)));
       });
 
       container.append(el('article', { class: `day ${date === todayIso ? 'today' : ''}` },
@@ -1432,7 +1500,7 @@ Method:
       const d = new Date(monday);
       d.setDate(d.getDate() + i);
       const day = data.plan[isoDate(d)] || {};
-      count += MEALS.filter(([meal]) => data.recipes.some((r) => r.id === day[meal])).length;
+      count += MEALS.filter(([meal]) => slotIds(day, meal).some((id) => data.recipes.some((r) => r.id === id))).length;
     }
     return count;
   }

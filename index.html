@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <header class="site-header">
@@ -77,6 +77,9 @@
       <section class="toolbar">
         <div class="toolbar-group">
           <input type="search" id="recipe-search" placeholder="Search recipes or ingredients…" aria-label="Search recipes">
+          <select id="recipe-kind" aria-label="Filter by kind of recipe">
+            <option value="">All kinds</option>
+          </select>
           <select id="recipe-difficulty" aria-label="Filter by difficulty">
             <option value="">Any difficulty</option>
             <option value="easy">Easy</option>
@@ -238,6 +241,10 @@
       <label>Recipe name
         <input type="text" id="recipe-name" required placeholder="e.g. Chicken stir fry">
       </label>
+      <label>What is it?
+        <select id="recipe-course"></select>
+        <span class="muted field-hint">Choose a part (like a side or a sauce) to add it alongside other recipes in the meal plan.</span>
+      </label>
       <div class="row">
         <label>Difficulty
           <select id="recipe-level">
@@ -374,8 +381,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=14"></script>
-  <script src="firebase-config.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="avatars.js?v=15"></script>
+  <script src="firebase-config.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
