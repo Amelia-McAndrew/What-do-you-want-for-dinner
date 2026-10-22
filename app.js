@@ -14,6 +14,7 @@
     items: [],
     recipes: [],
     plan: {},
+    members: [],
   };
   const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner']];
   const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
@@ -31,6 +32,7 @@
         if (Array.isArray(parsed.places) && Array.isArray(parsed.items)) {
           if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
           if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
+          if (!Array.isArray(parsed.members)) parsed.members = [];
           return parsed;
         }
       }
@@ -135,6 +137,7 @@
     renderPlaces();
     renderRecipes();
     renderPlan();
+    renderProfileButton();
   }
 
   function renderStats() {
@@ -199,7 +202,7 @@
     const low = isLow(item);
 
     return el('li', { class: 'item' },
-      el('div', { class: 'item-name' }, item.name,
+      el('div', { class: 'item-name' }, addedByAvatar(item), item.name,
         item.notes ? el('span', { class: 'item-notes' }, ` – ${item.notes}`) : null),
       el('div', { class: 'item-actions' },
         el('button', { type: 'button', class: 'btn btn-icon', title: 'Use one', 'aria-label': `Use one ${item.name}`, onclick: () => useSome(item) }, '−1'),
@@ -357,7 +360,7 @@
 
     return el('article', { class: 'recipe' },
       el('div', { class: 'recipe-head' },
-        el('h3', {}, recipe.name),
+        el('h3', {}, addedByAvatar(recipe), recipe.name),
         el('button', { type: 'button', class: 'btn btn-icon', title: 'Edit recipe', 'aria-label': `Edit ${recipe.name}`, onclick: () => openRecipeDialog(recipe) }, '✎'),
       ),
       el('div', { class: 'recipe-meta' },
@@ -413,7 +416,7 @@
     if (!fields.name) return;
     const existing = id && data.recipes.find((r) => r.id === id);
     if (existing) Object.assign(existing, fields);
-    else data.recipes.push({ id: uid(), ...fields });
+    else data.recipes.push({ id: uid(), addedBy: myId(), ...fields });
     save();
     renderRecipes();
     renderPlan();
@@ -737,7 +740,7 @@ Method:
     };
     if (!fields.name) return;
     if (id) Object.assign(data.items.find((i) => i.id === id), fields);
-    else data.items.push({ id: uid(), ...fields });
+    else data.items.push({ id: uid(), addedBy: myId(), ...fields });
     save();
     render();
   });
@@ -819,6 +822,7 @@ Method:
       if (!Array.isArray(parsed.places) || !Array.isArray(parsed.items)) throw new Error('bad shape');
       if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
       if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
+      if (!Array.isArray(parsed.members)) parsed.members = [];
       if (!confirm('Replace your current food list, recipes and meal plan with the imported ones?')) return;
       data = parsed;
       save();
@@ -828,6 +832,179 @@ Method:
     }
   });
 
+  // ---------- Profiles ----------
+  //
+  // Everyone in the household has a profile (name, photo) in data.members. Which profile is
+  // "me" is remembered per device, so each phone can pick its owner.
+
+  const ME_KEY = 'wdywfd-me';
+  const AVATAR_COLOURS = ['#2f7a4f', '#3a6ea5', '#b7791f', '#b83232', '#7a4fa0', '#1f8a8a', '#a0527a', '#5a6b2f'];
+
+  function myId() {
+    try { return localStorage.getItem(ME_KEY) || null; } catch (e) { return null; }
+  }
+
+  function me() {
+    const id = myId();
+    return id ? data.members.find((m) => m.id === id) || null : null;
+  }
+
+  function setMe(id) {
+    try {
+      if (id) localStorage.setItem(ME_KEY, id);
+      else localStorage.removeItem(ME_KEY);
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  function initials(name) {
+    return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  }
+
+  function colourFor(id) {
+    let h = 0;
+    for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return AVATAR_COLOURS[h % AVATAR_COLOURS.length];
+  }
+
+  function avatar(member, size) {
+    const style = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px;background:${colourFor(member.id)}`;
+    return member.photo
+      ? el('img', { class: 'avatar', src: member.photo, alt: '', style })
+      : el('span', { class: 'avatar', style, 'aria-hidden': 'true' }, initials(member.name));
+  }
+
+  function addedByAvatar(entry) {
+    const member = entry.addedBy && data.members.find((m) => m.id === entry.addedBy);
+    if (!member) return null;
+    return el('span', { class: 'added-by', title: `Added by ${member.name}`, 'aria-label': `Added by ${member.name}` }, avatar(member, 20));
+  }
+
+  function renderProfileButton() {
+    const btn = $('#profile-btn');
+    const mine = me();
+    btn.replaceChildren(...(mine
+      ? [avatar(mine, 26), el('span', {}, mine.name)]
+      : [el('span', { class: 'avatar avatar-empty', style: 'width:26px;height:26px' }, '?'), el('span', {}, 'Who are you?')]));
+  }
+
+  const whoDialog = $('#who-dialog');
+
+  function renderWhoList() {
+    const list = $('#who-list');
+    const mineId = myId();
+    list.replaceChildren(...data.members.map((m) =>
+      el('li', {},
+        el('button', { type: 'button', class: `who-person ${m.id === mineId ? 'selected' : ''}`, 'aria-pressed': String(m.id === mineId), onclick: () => { setMe(m.id); render(); whoDialog.close(); } },
+          avatar(m, 56), el('span', { class: 'who-name' }, m.name), m.id === mineId ? el('span', { class: 'who-me' }, 'This is you') : null),
+        el('button', { type: 'button', class: 'btn btn-icon who-edit', title: `Edit ${m.name}`, 'aria-label': `Edit ${m.name}`, onclick: () => openProfileForm(m) }, '✎'))));
+    $('#who-empty').hidden = data.members.length > 0;
+  }
+
+  function openWhoDialog() {
+    renderWhoList();
+    if (!whoDialog.open) whoDialog.showModal();
+  }
+
+  const profileDialog = $('#profile-dialog');
+  let pendingPhoto;   // undefined = unchanged, null = removed, string = new photo
+
+  function showPhotoPreview(member) {
+    const stand = {
+      id: member?.id || 'new',
+      name: $('#profile-name').value || member?.name || '?',
+      photo: pendingPhoto === undefined ? member?.photo : pendingPhoto,
+    };
+    $('#profile-photo-preview').replaceChildren(avatar(stand, 72));
+    $('#profile-photo-remove').hidden = !stand.photo;
+  }
+
+  function openProfileForm(member) {
+    $('#profile-dialog-title').textContent = member ? `Edit ${member.name}` : 'Add a person';
+    $('#profile-id').value = member?.id ?? '';
+    $('#profile-name').value = member?.name ?? '';
+    $('#profile-delete').hidden = !member;
+    $('#profile-photo-status').hidden = true;
+    pendingPhoto = undefined;
+    showPhotoPreview(member);
+    profileDialog.showModal();
+    $('#profile-name').focus();
+  }
+
+  const editingMember = () => data.members.find((m) => m.id === $('#profile-id').value);
+
+  // Shrink a photo to a small square so it can be stored with the rest of the data.
+  function photoToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const size = 160;
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        canvas.getContext('2d').drawImage(img,
+          (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
+      img.src = url;
+    });
+  }
+
+  $('#profile-photo').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      pendingPhoto = await photoToDataUrl(file);
+      $('#profile-photo-status').hidden = true;
+    } catch (err) {
+      $('#profile-photo-status').textContent = 'That picture couldn’t be opened. Try a different photo.';
+      $('#profile-photo-status').hidden = false;
+    }
+    showPhotoPreview(editingMember());
+  });
+
+  $('#profile-photo-remove').addEventListener('click', () => {
+    pendingPhoto = null;
+    showPhotoPreview(editingMember());
+  });
+
+  $('#profile-name').addEventListener('input', () => showPhotoPreview(editingMember()));
+
+  $('#profile-form').addEventListener('submit', () => {
+    const name = $('#profile-name').value.trim();
+    if (!name) return;
+    const existing = editingMember();
+    if (existing) {
+      existing.name = name;
+      if (pendingPhoto !== undefined) existing.photo = pendingPhoto;
+    } else {
+      const person = { id: uid(), name, photo: pendingPhoto || null };
+      data.members.push(person);
+      if (!me()) setMe(person.id);
+    }
+    save();
+    render();
+    if (whoDialog.open) renderWhoList();
+  });
+
+  $('#profile-delete').addEventListener('click', () => {
+    const member = editingMember();
+    if (!member || !confirm(`Remove ${member.name} from the household? Things they added stay.`)) return;
+    data.members = data.members.filter((m) => m.id !== member.id);
+    if (myId() === member.id) setMe(null);
+    save();
+    profileDialog.close();
+    render();
+    if (whoDialog.open) renderWhoList();
+  });
+
+  $('#profile-btn').addEventListener('click', openWhoDialog);
+  $('#who-add').addEventListener('click', () => openProfileForm(null));
+
   // ---------- Household sharing ----------
   //
   // Each household is households/<code> in Firestore, with one document per place, item,
@@ -835,7 +1012,7 @@ Method:
   // copy; save() sends only what changed, and changes from other phones arrive as snapshots.
 
   const HOUSEHOLD_KEY = 'wdywfd-household';
-  const COLLECTIONS = ['places', 'items', 'recipes', 'plan'];
+  const COLLECTIONS = ['places', 'items', 'recipes', 'plan', 'members'];
   const CODE_WORDS = ['APPLE', 'BASIL', 'BEAN', 'BERRY', 'BREAD', 'BROTH', 'BUTTER', 'CAKE', 'CARROT', 'CELERY',
     'CHEESE', 'CHERRY', 'CHILLI', 'CLOVE', 'COCOA', 'COCONUT', 'CORN', 'CREAM', 'CRUMB', 'CURRY', 'DATE', 'DILL',
     'DUMPLING', 'FENNEL', 'FUDGE', 'GARLIC', 'GINGER', 'GRAPE', 'GRAVY', 'HAZEL', 'HONEY', 'JAM', 'KALE', 'KIWI',
@@ -906,16 +1083,28 @@ Method:
         if (!(id in docs)) writes.push(['delete', name, id]);
       }
     }
-    // Firestore batches take up to 500 writes.
-    for (let i = 0; i < writes.length; i += 450) {
-      const batch = mod.writeBatch(db);
-      for (const [op, name, id, fields, json] of writes.slice(i, i + 450)) {
-        const ref = mod.doc(db, 'households', household.code, name, id);
+    // One batch per collection (Firestore takes up to 500 writes each), so a refused write
+    // in one list doesn't hold up the others. A refused write is forgotten so it's retried.
+    for (const name of COLLECTIONS) {
+      const mine = writes.filter((w) => w[1] === name);
+      for (let i = 0; i < mine.length; i += 450) {
+        const chunk = mine.slice(i, i + 450);
+        const batch = mod.writeBatch(db);
+        const before = { ...(synced[name] || {}) };
         synced[name] = synced[name] || {};
-        if (op === 'set') { batch.set(ref, fields); synced[name][id] = json; }
-        else { batch.delete(ref); delete synced[name][id]; }
+        for (const [op, , id, fields, json] of chunk) {
+          const ref = mod.doc(db, 'households', household.code, name, id);
+          if (op === 'set') { batch.set(ref, fields); synced[name][id] = json; }
+          else { batch.delete(ref); delete synced[name][id]; }
+        }
+        batch.commit().catch(() => {
+          for (const [, , id] of chunk) {
+            if (id in before) synced[name][id] = before[id];
+            else delete synced[name][id];
+          }
+          setHouseholdChip(name === 'members' ? 'profiles not shared yet' : 'couldn’t sync your last change');
+        });
       }
-      batch.commit().catch(() => setHouseholdChip('Couldn’t sync your last change'));
     }
   }
 
@@ -965,6 +1154,9 @@ Method:
     for (const name of COLLECTIONS) {
       const ref = mod.collection(db, 'households', household.code, name);
       unsubscribers.push(mod.onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
+        // Profiles were added later, so an empty cached copy may just mean the server hasn't
+        // answered (or older rules refuse them). Keep this phone's profiles until it does.
+        if (name === 'members' && snap.empty && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
         const docs = {};
         const seen = {};
         snap.forEach((d) => { docs[d.id] = d.data(); seen[d.id] = stable(d.data()); });
@@ -974,7 +1166,11 @@ Method:
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
         render();
         setHouseholdChip(snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'waiting for signal' : 'up to date');
-      }, () => setHouseholdChip('can’t reach the household')));
+      }, () => {
+        // Still let the other lists sync if this one is refused (e.g. older security rules).
+        ready.add(name);
+        setHouseholdChip(name === 'members' ? 'profiles not shared yet' : 'can’t reach the household');
+      }));
     }
   }
 
@@ -1045,6 +1241,7 @@ Method:
       setHouseholdChip('up to date');
       showHouseholdDialog();
       setHouseholdStatus('Household created. Send the invite link to everyone you live with.');
+      if (!me()) setTimeout(() => openWhoDialog(), 300);
     } catch (e) {
       setHouseholdStatus('Couldn’t create the household. Check you have signal and try again.', true);
     }
@@ -1073,6 +1270,7 @@ Method:
       startListening();
       showHouseholdDialog();
       setHouseholdStatus('You’ve joined. Everything you change now is shared.');
+      setTimeout(() => { $('#household-dialog').close(); if (!me()) openWhoDialog(); }, 1500);
     } catch (e) {
       setHouseholdStatus('Couldn’t join. Check you have signal and try again.', true);
     }

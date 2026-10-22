@@ -12,14 +12,17 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <header class="site-header">
     <div class="wrap">
       <h1>What do you want for dinner?</h1>
       <p class="tagline">Keep track of what's in the fridge, freezer and cupboard, and what to use first.</p>
-      <button type="button" class="household-chip" id="household-btn">🏠 Share with your household</button>
+      <div class="header-chips">
+        <button type="button" class="profile-chip" id="profile-btn" aria-label="Choose who you are"></button>
+        <button type="button" class="household-chip" id="household-btn">🏠 Share with your household</button>
+      </div>
       <nav class="tabs" role="tablist" aria-label="Sections">
         <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="true">My food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
@@ -253,6 +256,46 @@
     </form>
   </dialog>
 
+  <!-- Who are you? -->
+  <dialog id="who-dialog">
+    <form method="dialog">
+      <h2>Who are you?</h2>
+      <p class="muted">Pick your name so the household can see who added what. Each phone remembers its own choice.</p>
+      <ul id="who-list" class="who-list"></ul>
+      <p id="who-empty" class="muted" hidden>No one's been added yet. Add yourself to get started.</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="who-add">+ Add a person</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Add / edit a person -->
+  <dialog id="profile-dialog">
+    <form id="profile-form" method="dialog">
+      <h2 id="profile-dialog-title">Add a person</h2>
+      <input type="hidden" id="profile-id">
+      <div class="photo-row">
+        <div id="profile-photo-preview"></div>
+        <div class="photo-buttons">
+          <label class="btn btn-small">Choose photo<input type="file" id="profile-photo" accept="image/*" hidden></label>
+          <button type="button" class="btn btn-small btn-danger" id="profile-photo-remove">Remove photo</button>
+        </div>
+      </div>
+      <p id="profile-photo-status" class="ai-status error" role="status" hidden></p>
+      <label>Name
+        <input type="text" id="profile-name" required maxlength="30" autocomplete="given-name" placeholder="e.g. Amelia">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="profile-delete">Remove person</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Place dialog -->
   <dialog id="place-dialog">
     <form id="place-form" method="dialog">
@@ -282,7 +325,7 @@
       box.hidden = false;
     });
   </script>
-  <script src="firebase-config.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="firebase-config.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

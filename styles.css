@@ -352,10 +352,10 @@ dialog { max-height: calc(100dvh - 32px); }
 }
 
 /* Household */
+.header-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .household-chip {
   font: inherit;
   font-size: 0.85rem;
-  margin-top: 10px;
   padding: 5px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -378,3 +378,56 @@ dialog { max-height: calc(100dvh - 32px); }
 }
 #household-dialog hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 #household-dialog .dialog-actions { margin-bottom: 12px; }
+
+/* Profiles */
+.profile-chip {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+}
+.avatar-empty { background: var(--border); color: var(--muted); }
+.added-by { display: inline-flex; margin-right: 6px; vertical-align: -4px; }
+.who-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.who-list li { display: flex; align-items: center; gap: 8px; }
+.who-person {
+  font: inherit;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.who-person.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.who-name { font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.who-me { font-size: 0.75rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+.photo-row { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.photo-buttons { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+#profile-dialog .photo-buttons label { margin: 0; }
