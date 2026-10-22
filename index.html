@@ -19,10 +19,15 @@
     <div class="wrap">
       <h1>What do you want for dinner?</h1>
       <p class="tagline">Keep track of what's in the fridge, freezer and cupboard, and what to use first.</p>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="true">My food</button>
+        <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
+      </nav>
     </div>
   </header>
 
   <main class="wrap">
+    <div id="food-view" role="tabpanel" aria-labelledby="tab-food">
     <!-- Summary tiles -->
     <section class="stats" aria-label="Summary">
       <div class="stat"><span class="stat-value" id="stat-total">0</span><span class="stat-label">Items</span></div>
@@ -57,11 +62,37 @@
     <!-- Storage places -->
     <section id="places" class="places"></section>
     <p id="places-empty" class="muted center" hidden>No storage places yet. Add one to get started.</p>
+    </div>
+
+    <div id="recipes-view" role="tabpanel" aria-labelledby="tab-recipes" hidden>
+      <section class="toolbar">
+        <div class="toolbar-group">
+          <input type="search" id="recipe-search" placeholder="Search recipes or ingredients…" aria-label="Search recipes">
+          <select id="recipe-difficulty" aria-label="Filter by difficulty">
+            <option value="">Any difficulty</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <select id="recipe-sort" aria-label="Sort recipes">
+            <option value="have">Sort: most ingredients in stock</option>
+            <option value="time">Sort: quickest first</option>
+            <option value="difficulty">Sort: easiest first</option>
+            <option value="name">Sort: name A–Z</option>
+          </select>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" id="add-recipe-btn" class="btn btn-primary">+ Add recipe</button>
+        </div>
+      </section>
+      <section id="recipes" class="recipes"></section>
+      <p id="recipes-empty" class="muted center" hidden>No recipes yet. Add your favourite dinners and see which ones you can make with what you have.</p>
+    </div>
 
     <footer class="data-tools">
       <button type="button" id="export-btn" class="btn btn-small">Export data</button>
       <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
-      <span class="muted">Your food list is saved on this device.</span>
+      <span class="muted">Your food and recipes are saved on this device.</span>
     </footer>
   </main>
 
@@ -99,6 +130,41 @@
       </datalist>
       <div class="dialog-actions">
         <button type="button" class="btn btn-danger" id="item-delete">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Recipe dialog -->
+  <dialog id="recipe-dialog">
+    <form id="recipe-form" method="dialog">
+      <h2 id="recipe-dialog-title">Add recipe</h2>
+      <input type="hidden" id="recipe-id">
+      <label>Recipe name
+        <input type="text" id="recipe-name" required placeholder="e.g. Chicken stir fry">
+      </label>
+      <div class="row">
+        <label>Difficulty
+          <select id="recipe-level">
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+        <label>Total time (minutes)
+          <input type="number" id="recipe-time" min="0" step="5" placeholder="e.g. 30">
+        </label>
+      </div>
+      <label>Ingredients <span class="muted">(one per line)</span>
+        <textarea id="recipe-ingredients" rows="6" required placeholder="4 chicken thighs&#10;1 pepper&#10;200g noodles&#10;Soy sauce"></textarea>
+      </label>
+      <label>Method <span class="muted">(optional)</span>
+        <textarea id="recipe-method" rows="6" placeholder="1. Slice the chicken…"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="recipe-delete">Delete</button>
         <span class="spacer"></span>
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>

@@ -7,6 +7,7 @@ A simple dashboard for keeping track of the food you have at home.
 - **Dashboard** – totals for items, things going off in the next 3 days, things that have gone off, and things running low.
 - **Use these first** – a list of food that's about to go off, so you know what to cook tonight.
 - Search, sort (soonest to go off, name, least left), a quick "−1" button to use some up, and export/import of your data as JSON.
+- **Recipes tab** – store recipes with their ingredients (one per line), an optional method, a difficulty level (easy / medium / hard) and the total time. Each recipe shows how many of its ingredients you have in stock, and you can sort by most ingredients in stock, quickest or easiest, or filter by difficulty.
 
 ## Running it
 

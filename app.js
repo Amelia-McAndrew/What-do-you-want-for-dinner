@@ -12,7 +12,10 @@
       { id: 'cupboard', name: 'Cupboard', icon: '🥫' },
     ],
     items: [],
+    recipes: [],
   };
+  const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+  const TAB_KEY = 'wdywfd-tab';
 
   // ---------- State ----------
 
@@ -23,7 +26,10 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.places) && Array.isArray(parsed.items)) return parsed;
+        if (Array.isArray(parsed.places) && Array.isArray(parsed.items)) {
+          if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
+          return parsed;
+        }
       }
     } catch (e) { /* fall through to defaults */ }
     return structuredClone(DEFAULT_DATA);
@@ -123,6 +129,7 @@
     renderStats();
     renderUseFirst();
     renderPlaces();
+    renderRecipes();
   }
 
   function renderStats() {
@@ -203,6 +210,165 @@
         : null,
     );
   }
+
+  // ---------- Recipes ----------
+
+  // Strip a leading amount like "200g", "2 x", "1 tin of" so "200g chicken" compares as "chicken".
+  function ingredientName(line) {
+    return line.toLowerCase()
+      .replace(/^[\d\s.,/½¼¾x×-]+(g|kg|ml|l|tbsp|tsp|cups?|oz|lb|tins?|cans?|packs?|jars?|cloves?|pinch(es)?)?\b\s*(of\s+)?/, '')
+      .trim();
+  }
+
+  // The food item that covers an ingredient line, if any. Prefers items that haven't gone off.
+  function stockFor(line) {
+    const name = ingredientName(line);
+    const full = line.toLowerCase();
+    if (name.length < 3) return null;
+    const matches = data.items.filter((item) => {
+      const food = item.name.toLowerCase().trim();
+      if (item.qty <= 0 || food.length < 3) return false;
+      return full.includes(food) || food.includes(name);
+    });
+    if (!matches.length) return null;
+    return matches.find((i) => { const d = daysUntil(i.expiry); return d === null || d >= 0; }) || matches[0];
+  }
+
+  function recipeStock(recipe) {
+    const lines = recipe.ingredients.map((line) => ({ line, item: stockFor(line) }));
+    return { lines, have: lines.filter((l) => l.item).length, total: lines.length };
+  }
+
+  function timeText(mins) {
+    if (!mins) return null;
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m ? `${h} hr ${m} min` : `${h} hr`;
+  }
+
+  function renderRecipes() {
+    const container = $('#recipes');
+    const query = $('#recipe-search').value.trim().toLowerCase();
+    const level = $('#recipe-difficulty').value;
+    const sort = $('#recipe-sort').value;
+    container.replaceChildren();
+
+    let list = data.recipes
+      .filter((r) => !level || r.difficulty === level)
+      .filter((r) => !query || r.name.toLowerCase().includes(query) ||
+        r.ingredients.some((i) => i.toLowerCase().includes(query)))
+      .map((r) => ({ recipe: r, stock: recipeStock(r) }));
+
+    const order = { easy: 0, medium: 1, hard: 2 };
+    const byTime = (a, b) => (a.recipe.time || Infinity) - (b.recipe.time || Infinity);
+    const byName = (a, b) => a.recipe.name.localeCompare(b.recipe.name);
+    if (sort === 'time') list.sort((a, b) => byTime(a, b) || byName(a, b));
+    else if (sort === 'difficulty') list.sort((a, b) => order[a.recipe.difficulty] - order[b.recipe.difficulty] || byTime(a, b) || byName(a, b));
+    else if (sort === 'name') list.sort(byName);
+    else {
+      const missing = (x) => x.stock.total - x.stock.have;
+      list.sort((a, b) => missing(a) - missing(b) || b.stock.have - a.stock.have || byName(a, b));
+    }
+
+    $('#recipes-empty').hidden = data.recipes.length > 0;
+    if (data.recipes.length && !list.length) {
+      container.append(el('p', { class: 'muted' }, 'No recipes match that search.'));
+    }
+    for (const { recipe, stock } of list) container.append(renderRecipe(recipe, stock));
+  }
+
+  function renderRecipe(recipe, stock) {
+    const allIn = stock.total > 0 && stock.have === stock.total;
+    const ingredients = el('ul', { class: 'ingredients' }, stock.lines.map(({ line, item }) => {
+      const off = item && daysUntil(item.expiry) !== null && daysUntil(item.expiry) < 0;
+      return el('li', { class: item ? `have${off ? ' off' : ''}` : '', title: item ? `In stock: ${item.name}` : 'Not in stock' },
+        el('span', { class: 'mark', 'aria-label': item ? 'In stock' : 'Not in stock' }, item ? '✓' : '○'),
+        el('span', {}, line, off ? el('span', { class: 'muted' }, ' (gone off)') : null));
+    }));
+
+    return el('article', { class: 'recipe' },
+      el('div', { class: 'recipe-head' },
+        el('h3', {}, recipe.name),
+        el('button', { type: 'button', class: 'btn btn-icon', title: 'Edit recipe', 'aria-label': `Edit ${recipe.name}`, onclick: () => openRecipeDialog(recipe) }, '✎'),
+      ),
+      el('div', { class: 'recipe-meta' },
+        el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
+        recipe.time ? el('span', { class: 'badge' }, `⏱ ${timeText(recipe.time)}`) : null,
+        el('span', { class: `badge ${allIn ? 'have-all' : ''}` },
+          allIn ? 'You have everything' : `You have ${stock.have} of ${stock.total} ingredients`),
+      ),
+      el('details', {},
+        el('summary', {}, recipe.method ? 'Ingredients and method' : 'Ingredients'),
+        el('h4', {}, 'Ingredients'),
+        ingredients,
+        recipe.method ? [el('h4', {}, 'Method'), el('p', { class: 'method' }, recipe.method)] : null,
+      ),
+    );
+  }
+
+  const recipeDialog = $('#recipe-dialog');
+
+  function openRecipeDialog(recipe) {
+    $('#recipe-dialog-title').textContent = recipe ? 'Edit recipe' : 'Add recipe';
+    $('#recipe-id').value = recipe?.id ?? '';
+    $('#recipe-name').value = recipe?.name ?? '';
+    $('#recipe-level').value = recipe?.difficulty ?? 'easy';
+    $('#recipe-time').value = recipe?.time ?? '';
+    $('#recipe-ingredients').value = recipe ? recipe.ingredients.join('\n') : '';
+    $('#recipe-method').value = recipe?.method ?? '';
+    $('#recipe-delete').hidden = !recipe;
+    recipeDialog.showModal();
+    $('#recipe-name').focus();
+  }
+
+  $('#recipe-form').addEventListener('submit', () => {
+    const id = $('#recipe-id').value;
+    const time = parseInt($('#recipe-time').value, 10);
+    const fields = {
+      name: $('#recipe-name').value.trim(),
+      difficulty: $('#recipe-level').value,
+      time: time > 0 ? time : null,
+      ingredients: $('#recipe-ingredients').value.split('\n').map((l) => l.trim()).filter(Boolean),
+      method: $('#recipe-method').value.trim(),
+    };
+    if (!fields.name) return;
+    const existing = id && data.recipes.find((r) => r.id === id);
+    if (existing) Object.assign(existing, fields);
+    else data.recipes.push({ id: uid(), ...fields });
+    save();
+    renderRecipes();
+  });
+
+  $('#recipe-delete').addEventListener('click', () => {
+    const id = $('#recipe-id').value;
+    const recipe = data.recipes.find((r) => r.id === id);
+    if (recipe && confirm(`Delete the ${recipe.name} recipe?`)) {
+      data.recipes = data.recipes.filter((r) => r.id !== id);
+      save();
+      renderRecipes();
+      recipeDialog.close();
+    }
+  });
+
+  $('#add-recipe-btn').addEventListener('click', () => openRecipeDialog(null));
+  $('#recipe-search').addEventListener('input', renderRecipes);
+  $('#recipe-difficulty').addEventListener('change', renderRecipes);
+  $('#recipe-sort').addEventListener('change', renderRecipes);
+
+  // ---------- Tabs ----------
+
+  function showTab(name) {
+    const recipes = name === 'recipes';
+    $('#tab-food').setAttribute('aria-selected', String(!recipes));
+    $('#tab-recipes').setAttribute('aria-selected', String(recipes));
+    $('#food-view').hidden = recipes;
+    $('#recipes-view').hidden = !recipes;
+    try { localStorage.setItem(TAB_KEY, name); } catch (e) { /* storage unavailable */ }
+  }
+
+  $('#tab-food').addEventListener('click', () => showTab('food'));
+  $('#tab-recipes').addEventListener('click', () => showTab('recipes'));
+  try { if (localStorage.getItem(TAB_KEY) === 'recipes') showTab('recipes'); } catch (e) { /* storage unavailable */ }
 
   // ---------- Actions ----------
 
@@ -333,7 +499,8 @@
     try {
       const parsed = JSON.parse(await file.text());
       if (!Array.isArray(parsed.places) || !Array.isArray(parsed.items)) throw new Error('bad shape');
-      if (!confirm('Replace your current food list with the imported one?')) return;
+      if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
+      if (!confirm('Replace your current food list and recipes with the imported ones?')) return;
       data = parsed;
       save();
       render();
