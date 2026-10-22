@@ -37,6 +37,9 @@
 
 * { box-sizing: border-box; }
 
+/* Anything marked hidden stays hidden, even if a layout rule gives it a display value. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
