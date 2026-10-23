@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=23">
+  <link rel="stylesheet" href="styles.css?v=24">
 </head>
 <body>
   <header class="site-header">
@@ -29,6 +29,7 @@
         <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="false">Food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
         <button type="button" role="tab" class="tab" id="tab-plan" aria-controls="plan-view" aria-selected="false">Plan</button>
+        <button type="button" role="tab" class="tab" id="tab-shop" aria-controls="shop-view" aria-selected="false">Shop</button>
       </nav>
     </div>
   </header>
@@ -73,11 +74,9 @@
         <div class="widget-head">
           <h2>Shopping list</h2>
           <span class="muted" id="dash-shop-count"></span>
-          <button type="button" class="btn btn-small" id="dash-copy">Copy list</button>
+          <button type="button" class="btn btn-small" id="dash-shop-copy">Copy list</button>
         </div>
-        <p class="muted widget-note">For the next 7 days of planned meals. Tick things off as you shop.</p>
-        <ul id="dash-shopping" class="shopping-list"></ul>
-        <p id="dash-shopping-empty" class="muted"></p>
+        <div id="dash-shop" class="shop"></div>
       </section>
     </div>
 
@@ -188,11 +187,23 @@
       <section id="week" class="week"></section>
       <section class="panel shopping">
         <div class="shopping-head">
-          <h2>Shopping list for this week</h2>
-          <button type="button" class="btn btn-small" id="copy-shopping">Copy list</button>
+          <h2>Needed for this week’s meals</h2>
+          <button type="button" class="btn btn-small" id="copy-shopping">Add all to list</button>
         </div>
         <ul id="shopping" class="shopping-list"></ul>
         <p id="shopping-empty" class="muted"></p>
+      </section>
+    </div>
+
+    <div id="shop-view" role="tabpanel" aria-labelledby="tab-shop" hidden>
+      <section class="panel widget">
+        <div class="widget-head">
+          <h2>Shopping list</h2>
+          <span class="muted" id="tab-shop-count"></span>
+          <button type="button" class="btn btn-small" id="tab-shop-copy">Copy list</button>
+        </div>
+        <p class="muted widget-note">Add anything you need. Separate several things with commas. Tick them off as you shop, then put them in Food when you're home.</p>
+        <div id="tab-shop-list" class="shop"></div>
       </section>
     </div>
 
@@ -564,6 +575,21 @@
     </form>
   </dialog>
 
+  <!-- Ingredients missing for a meal just added to the plan -->
+  <dialog id="missing-dialog">
+    <form id="missing-form" method="dialog">
+      <h2 id="missing-title">Missing ingredients</h2>
+      <p id="missing-intro" class="muted"></p>
+      <ul id="missing-list" class="missing-list"></ul>
+      <button type="button" class="btn btn-small" id="missing-all-shop">Put everything on the shopping list</button>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Not now</button>
+        <button type="submit" class="btn btn-primary">Done</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Place dialog -->
   <dialog id="place-dialog">
     <form id="place-form" method="dialog">
@@ -593,8 +619,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=23"></script>
-  <script src="firebase-config.js?v=23"></script>
-  <script src="app.js?v=23"></script>
+  <script src="avatars.js?v=24"></script>
+  <script src="firebase-config.js?v=24"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>

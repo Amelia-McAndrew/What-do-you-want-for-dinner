@@ -741,3 +741,24 @@ dialog.drawer[open] { display: flex; animation: drawer-in 0.22s ease-out; }
 .me-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .drawer .data-tools { margin: 0; }
 .drawer .glance { grid-template-columns: repeat(2, 1fr); }
+
+/* Shopping list */
+.shop { display: flex; flex-direction: column; gap: 10px; }
+.shop-add { display: flex; gap: 8px; }
+.shop-add input { flex: 1; min-width: 0; }
+.shop .ai-status { margin: 0; }
+.shop-suggest { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 8px; background: var(--low-bg); font-size: 0.88rem; }
+.shop-suggest span { flex: 1; min-width: 160px; }
+.shop .tick-list li { align-items: center; }
+.shop .tick-list label { flex: 1; min-width: 0; }
+.shop-remove { padding: 0 8px; line-height: 1.6; }
+.shop-done { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.shop-done h4 { margin: 0; font-size: 0.9rem; color: var(--muted); }
+.shop-done-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.suggest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.suggest-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.missing-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.missing-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.missing-name { font-weight: 600; overflow-wrap: anywhere; }
+.missing-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.missing-controls select { flex: 1 1 140px; width: auto; }

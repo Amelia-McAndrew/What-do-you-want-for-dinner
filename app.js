@@ -15,6 +15,7 @@
     recipes: [],
     plan: {},
     members: [],
+    shopping: [],
   };
   const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner']];
   const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
@@ -176,6 +177,7 @@
           if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
           if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
           if (!Array.isArray(parsed.members)) parsed.members = [];
+          if (!Array.isArray(parsed.shopping)) parsed.shopping = [];
           return parsed;
         }
       }
@@ -305,6 +307,7 @@
     renderProfileButton();
     renderHousehold();
     renderToday();
+    renderShopTab();
   }
 
   function renderStats() {
@@ -823,7 +826,7 @@ Method:
       el('option', { value: '' }, 'All categories'),
       el('option', { value: '@season' }, `${CATEGORY_INFO[season].icon} In season now (${CATEGORY_INFO[season].label})`),
       ...CATEGORY_GROUPS.map(([group, cats]) => el('optgroup', { label: group }, cats.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)))),
-      custom.length ? el('optgroup', { label: 'Your own' }, custom.map((t) => el('option', { value: t }, `🏷️ ${t}`))) : null);
+      ...(custom.length ? [el('optgroup', { label: 'Your own' }, custom.map((t) => el('option', { value: t }, `🏷️ ${t}`)))] : []));
     select.value = [...select.options].some((o) => o.value === current) ? current : '';
   }
   $('#recipe-cat').addEventListener('change', renderRecipes);
@@ -891,8 +894,13 @@ Method:
 
   function addDish(date, meal, recipeId) {
     const ids = slotIds(data.plan[date], meal);
-    if (recipeId && !ids.includes(recipeId)) setSlot(date, meal, [...ids, recipeId]);
-    else renderPlan();
+    if (recipeId && !ids.includes(recipeId)) {
+      setSlot(date, meal, [...ids, recipeId]);
+      const recipe = data.recipes.find((r) => r.id === recipeId);
+      if (recipe) askAboutMissing(recipe);
+    } else {
+      renderPlan();
+    }
   }
 
   function removeDish(date, meal, recipeId) {
@@ -1206,32 +1214,29 @@ Method:
       .filter((group) => group.lines.length);
   }
 
+  // Plan tab: what this week's meals need that isn't in stock or on the shopping list yet.
   function renderShopping() {
-    const list = shoppingList();
+    const all = shoppingList();
+    const list = all.filter(({ line }) => !onShoppingList(line));
     const planned = plannedRecipes().length;
     $('#shopping').replaceChildren(...shoppingByType(list).map(({ icon, label, lines }) =>
       el('li', { class: 'shopping-group' },
         el('h3', {}, `${icon} ${label}`),
-        el('ul', {}, lines.map(({ line, recipes }) =>
-          el('li', {}, line, el('span', { class: 'for' }, ` · for ${[...recipes].join(', ')}`)))))));
+        el('ul', { class: 'suggest-list' }, lines.map(({ line, recipes }) =>
+          el('li', {},
+            el('span', {}, line, el('span', { class: 'for' }, ` · for ${[...recipes].join(', ')}`)),
+            el('button', { type: 'button', class: 'btn btn-small', onclick: () => { addToShopping(line, [...recipes].join(', ')); save(); render(); } }, '+ List')))))));
     $('#shopping-empty').hidden = list.length > 0;
-    $('#shopping-empty').textContent = planned
-      ? 'You already have everything for this week’s meals.'
-      : 'Pick some meals above and anything you don’t have in stock will be listed here.';
+    $('#shopping-empty').textContent = !planned
+      ? 'Pick some meals above and anything you don’t have in stock will be listed here.'
+      : all.length ? 'Everything you need for this week’s meals is on your shopping list.' : 'You already have everything for this week’s meals.';
     $('#copy-shopping').hidden = list.length === 0;
   }
 
-  $('#copy-shopping').addEventListener('click', async () => {
-    const text = shoppingByType(shoppingList())
-      .map(({ icon, label, lines }) => `${icon} ${label}\n${lines.map(({ line }) => `- ${line}`).join('\n')}`)
-      .join('\n\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      $('#copy-shopping').textContent = 'Copied';
-      setTimeout(() => { $('#copy-shopping').textContent = 'Copy list'; }, 1500);
-    } catch (e) {
-      prompt('Copy your shopping list:', text);
-    }
+  $('#copy-shopping').addEventListener('click', () => {
+    for (const { line, recipes } of shoppingList()) addToShopping(line, [...recipes].join(', '));
+    save();
+    render();
   });
 
   const moveWeek = (days) => { weekStart.setDate(weekStart.getDate() + days); renderPlan(); };
@@ -1247,7 +1252,6 @@ Method:
 
   // ---------- Today (dashboard) ----------
 
-  const TICKS_KEY = 'wdywfd-shopping-ticks';
   let dashOffset = 1;   // which day the day-by-day card shows, in days from today
 
   function addDays(date, n) {
@@ -1362,14 +1366,6 @@ Method:
     $('#dash-low').replaceChildren(...low.map((item) => el('li', {}, item.name, el('span', { class: 'muted' }, ` · ${amountText(item)}`))));
   }
 
-  function loadTicks() {
-    try { return JSON.parse(localStorage.getItem(TICKS_KEY) || '{}'); } catch (e) { return {}; }
-  }
-
-  function saveTicks(ticks) {
-    try { localStorage.setItem(TICKS_KEY, JSON.stringify(ticks)); } catch (e) { /* storage unavailable */ }
-  }
-
   // Shopping for the next 7 days of planned meals.
   function upcomingShopping() {
     const recipes = [];
@@ -1381,50 +1377,198 @@ Method:
   }
 
   function renderDashShopping() {
-    const { list, planned } = upcomingShopping();
-    const ticks = loadTicks();
-    // Forget ticks for things no longer on the list.
-    const keys = new Set(list.map(({ line }) => line.toLowerCase()));
-    for (const key of Object.keys(ticks)) if (!keys.has(key)) delete ticks[key];
-    saveTicks(ticks);
-
-    const left = list.filter(({ line }) => !ticks[line.toLowerCase()]).length;
-    $('#dash-shop-count').textContent = list.length ? `${left} to get` : '';
-    $('#dash-shopping').replaceChildren(...shoppingByType(list).map(({ icon, label, lines }) =>
-      el('li', { class: 'shopping-group' },
-        el('h4', {}, `${icon} ${label}`),
-        el('ul', { class: 'tick-list' }, lines.map(({ line, recipes }) => {
-          const key = line.toLowerCase();
-          const id = `tick-${key.replace(/[^a-z0-9]+/g, '-')}`;
-          return el('li', { class: ticks[key] ? 'done' : '' },
-            el('input', { type: 'checkbox', id, checked: ticks[key] ? 'checked' : null, onchange: (e) => {
-              const now = loadTicks();
-              if (e.target.checked) now[key] = true; else delete now[key];
-              saveTicks(now);
-              renderDashShopping();
-            } }),
-            el('label', { for: id }, line, el('span', { class: 'for' }, ` · ${[...recipes].join(', ')}`)));
-        })))));
-    $('#dash-shopping-empty').hidden = list.length > 0;
-    $('#dash-shopping-empty').textContent = planned
-      ? 'You already have everything for the next 7 days of meals.'
-      : 'Plan some meals and anything you need for the next 7 days will show up here.';
-    $('#dash-copy').hidden = left === 0;
+    renderShopList($('#dash-shop'), 'dash');
   }
 
-  $('#dash-copy').addEventListener('click', async () => {
-    const ticks = loadTicks();
-    const list = upcomingShopping().list.filter(({ line }) => !ticks[line.toLowerCase()]);
-    const text = shoppingByType(list)
-      .map(({ icon, label, lines }) => `${icon} ${label}\n${lines.map(({ line }) => `- ${line}`).join('\n')}`)
-      .join('\n\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      $('#dash-copy').textContent = 'Copied';
-      setTimeout(() => { $('#dash-copy').textContent = 'Copy list'; }, 1500);
-    } catch (e) {
-      prompt('Copy your shopping list:', text);
+  // ---------- Shopping list ----------
+  //
+  // A list the household adds to: by hand, from a meal's missing ingredients, or from the
+  // suggestions for planned meals. Ticked items can be moved into Food once you're home.
+
+  const shopKey = (text) => singular(ingredientName(text) || text);
+
+  function onShoppingList(text) {
+    const key = shopKey(text);
+    if (key.length < 2) return false;
+    return data.shopping.some((s) => {
+      if (s.done) return false;
+      const other = shopKey(s.name);
+      return other === key || (other.length >= 3 && key.includes(other)) || (key.length >= 3 && other.includes(key));
+    });
+  }
+
+  function addToShopping(name, note) {
+    const clean = name.trim().slice(0, 120);
+    if (!clean || onShoppingList(clean)) return false;
+    data.shopping.push({ id: uid(), name: clean, type: guessType(clean), done: false, note: (note || '').slice(0, 120), addedBy: myId(), added: new Date().toISOString() });
+    return true;
+  }
+
+  function placeFor(type) {
+    const find = (re) => data.places.find((p) => re.test(p.name));
+    if (['meat', 'dairy'].includes(type)) return (find(/fridge/i) || data.places[0]).id;
+    if (type === 'produce') return (find(/fridge|veg|fruit/i) || find(/cupboard|pantry/i) || data.places[0]).id;
+    return (find(/cupboard|pantry|larder|shelf/i) || data.places[0]).id;
+  }
+
+  // Turn "200g egg noodles" into a food item called "Egg noodles".
+  function foodFromText(text, placeId) {
+    const base = ingredientName(text) || text.trim();
+    const name = (base.charAt(0).toUpperCase() + base.slice(1)).replace(/,.*$/, '').trim().slice(0, 80);
+    const type = guessType(name);
+    data.items.push({ id: uid(), addedBy: myId(), name, type, placeId: placeId || placeFor(type), expiry: null, dateKind: defaultDateKind(type), qty: 1, unit: '', full: null, notes: '' });
+  }
+
+  function shopSuggestions() {
+    return upcomingShopping().list.filter(({ line }) => !onShoppingList(line));
+  }
+
+  function renderShopList(container, prefix) {
+    const pending = data.shopping.filter((s) => !s.done);
+    const done = data.shopping.filter((s) => s.done);
+    const suggestions = shopSuggestions();
+    const row = (item) => {
+      const id = `${prefix}-shop-${item.id}`;
+      const who = item.addedBy && data.members.find((m) => m.id === item.addedBy);
+      return el('li', { class: item.done ? 'done' : '' },
+        el('input', { type: 'checkbox', id, checked: item.done ? 'checked' : null, onchange: (e) => { item.done = e.target.checked; save(); render(); } }),
+        el('label', { for: id }, who ? addedByAvatar(item) : null, item.name, item.note ? el('span', { class: 'for' }, ` · for ${item.note}`) : null),
+        el('button', { type: 'button', class: 'btn btn-icon shop-remove', title: `Remove ${item.name}`, 'aria-label': `Remove ${item.name}`, onclick: () => { data.shopping = data.shopping.filter((s) => s.id !== item.id); save(); render(); } }, '×'));
+    };
+    const groups = FOOD_TYPES.map(([type, icon, label]) => ({ icon, label, items: pending.filter((s) => (TYPE_INFO[s.type] ? s.type : 'other') === type) }))
+      .filter((g) => g.items.length);
+
+    // Keep anything half-typed (and the cursor) when the list redraws, e.g. after a sync.
+    const old = document.getElementById(`${prefix}-shop-new`);
+    const typed = old ? old.value : '';
+    const hadFocus = old && document.activeElement === old;
+    const input = el('input', { type: 'text', id: `${prefix}-shop-new`, placeholder: 'Add something, e.g. milk', 'aria-label': 'Add to shopping list', autocomplete: 'off' });
+    input.value = typed;
+    const add = () => {
+      const parts = input.value.split(',').map((x) => x.trim()).filter(Boolean);
+      if (!parts.length) { input.focus(); return; }
+      const added = parts.filter((x) => addToShopping(x));
+      input.value = '';
+      save();
+      render();
+      const again = document.getElementById(`${prefix}-shop-new`);
+      if (again) again.focus();
+      if (added.length < parts.length) flashShop(prefix, 'Already on the list.');
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+
+    container.replaceChildren(...[
+      el('div', { class: 'shop-add' }, input, el('button', { type: 'button', class: 'btn btn-primary', onclick: add }, 'Add')),
+      el('p', { class: 'ai-status', id: `${prefix}-shop-flash`, role: 'status', hidden: 'hidden' }),
+      suggestions.length
+        ? el('div', { class: 'shop-suggest' },
+            el('span', {}, `${suggestions.length} thing${suggestions.length === 1 ? '' : 's'} for the next 7 days of meals ${suggestions.length === 1 ? 'isn’t' : 'aren’t'} in stock or on the list.`),
+            el('button', { type: 'button', class: 'btn btn-small', onclick: () => {
+              for (const { line, recipes } of suggestions) addToShopping(line, [...recipes].join(', '));
+              save();
+              render();
+            } }, 'Add them'))
+        : null,
+      groups.length
+        ? el('ul', { class: 'shopping-list' }, groups.map(({ icon, label, items }) =>
+            el('li', { class: 'shopping-group' }, el('h4', {}, `${icon} ${label}`), el('ul', { class: 'tick-list' }, items.map(row)))))
+        : el('p', { class: 'muted' }, done.length ? 'All done. Nice shopping.' : 'Your shopping list is empty. Add things above, or plan some meals.'),
+      done.length
+        ? el('div', { class: 'shop-done' },
+            el('h4', {}, `Ticked (${done.length})`),
+            el('ul', { class: 'tick-list' }, done.map(row)),
+            el('div', { class: 'shop-done-actions' },
+              el('button', { type: 'button', class: 'btn btn-small btn-primary', onclick: () => {
+                for (const item of done) foodFromText(item.name, placeFor(TYPE_INFO[item.type] ? item.type : guessType(item.name)));
+                data.shopping = data.shopping.filter((s) => !s.done);
+                save();
+                render();
+                flashShop(prefix, `Put ${done.length} thing${done.length === 1 ? '' : 's'} in Food. Add dates there if you like.`);
+              } }, 'Put ticked in Food'),
+              el('button', { type: 'button', class: 'btn btn-small', onclick: () => { data.shopping = data.shopping.filter((s) => !s.done); save(); render(); } }, 'Clear ticked')))
+        : null].filter(Boolean));
+    if (hadFocus) input.focus();
+    const countEl = document.getElementById(`${prefix}-shop-count`);
+    if (countEl) countEl.textContent = pending.length ? `${pending.length} to get` : '';
+    const copyEl = document.getElementById(`${prefix}-shop-copy`);
+    if (copyEl) copyEl.hidden = pending.length === 0;
+  }
+
+  function flashShop(prefix, text) {
+    const box = document.getElementById(`${prefix}-shop-flash`);
+    if (!box) return;
+    box.textContent = text;
+    box.hidden = false;
+    clearTimeout(box._timer);
+    box._timer = setTimeout(() => { box.hidden = true; }, 3000);
+  }
+
+  function shopListText() {
+    const pending = data.shopping.filter((s) => !s.done);
+    return FOOD_TYPES.map(([type, icon, label]) => {
+      const items = pending.filter((s) => (TYPE_INFO[s.type] ? s.type : 'other') === type);
+      return items.length ? `${icon} ${label}\n${items.map((s) => `- ${s.name}`).join('\n')}` : null;
+    }).filter(Boolean).join('\n\n');
+  }
+
+  for (const prefix of ['dash', 'tab']) {
+    const btn = document.getElementById(`${prefix}-shop-copy`);
+    btn.addEventListener('click', async () => {
+      const text = shopListText();
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy list'; }, 1500);
+      } catch (e) {
+        prompt('Copy your shopping list:', text);
+      }
+    });
+  }
+
+  function renderShopTab() {
+    renderShopList($('#tab-shop-list'), 'tab');
+  }
+
+  // When a meal is added to the plan, ask about any ingredients that aren't in stock.
+  const missingDialog = $('#missing-dialog');
+  let missingRecipe = null;
+
+  function askAboutMissing(recipe) {
+    const missing = recipe.ingredients.filter((line) => line.trim() && !stockFor(line) && !onShoppingList(line));
+    if (!missing.length) return;
+    missingRecipe = recipe;
+    $('#missing-title').textContent = `${recipe.name} needs`;
+    $('#missing-intro').textContent = `${missing.length === 1 ? 'This isn’t' : 'These aren’t'} in your food or on your shopping list. What would you like to do?`;
+    const placeOptions = () => data.places.map((p) => el('option', { value: p.id }, `${p.icon ? `${p.icon} ` : ''}${p.name}`));
+    $('#missing-list').replaceChildren(...missing.map((line, i) => {
+      const choice = el('select', { class: 'missing-choice', 'aria-label': `What to do with ${line}`, 'data-line': line },
+        el('option', { value: 'shop' }, '🛒 Add to shopping list'),
+        el('option', { value: 'have' }, '✓ I have it'),
+        el('option', { value: 'skip' }, 'Skip'));
+      const place = el('select', { class: 'missing-place', 'aria-label': `Where ${line} is kept`, hidden: 'hidden' }, placeOptions());
+      place.value = placeFor(guessType(line));
+      choice.addEventListener('change', () => { place.hidden = choice.value !== 'have'; });
+      return el('li', { class: 'missing-row' }, el('span', { class: 'missing-name' }, line), el('div', { class: 'missing-controls' }, choice, place));
+    }));
+    if (!missingDialog.open) missingDialog.showModal();
+  }
+
+  $('#missing-all-shop').addEventListener('click', () => {
+    document.querySelectorAll('#missing-list .missing-choice').forEach((c) => { c.value = 'shop'; c.dispatchEvent(new Event('change')); });
+  });
+
+  $('#missing-form').addEventListener('submit', () => {
+    if (!missingRecipe) return;
+    let shop = 0;
+    let have = 0;
+    for (const rowEl of document.querySelectorAll('#missing-list .missing-row')) {
+      const choice = rowEl.querySelector('.missing-choice');
+      const line = choice.dataset.line;
+      if (choice.value === 'shop' && addToShopping(line, missingRecipe.name)) shop++;
+      if (choice.value === 'have') { foodFromText(line, rowEl.querySelector('.missing-place').value); have++; }
     }
+    missingRecipe = null;
+    if (shop || have) { save(); render(); }
   });
 
   // Read-only recipe, opened from the dashboard (handy while cooking).
@@ -1601,7 +1745,7 @@ Method:
     $('#shared-body').replaceChildren(
       el('p', { class: 'muted' }, 'Someone shared this recipe with you.'),
       card,
-      already ? el('p', { class: 'muted' }, `You already have a recipe called ${incoming.name}. Saving adds a second copy.`) : null);
+      ...(already ? [el('p', { class: 'muted' }, `You already have a recipe called ${incoming.name}. Saving adds a second copy.`)] : []));
     $('#shared-save').hidden = false;
     sharedDialog.showModal();
   }
@@ -1626,7 +1770,7 @@ Method:
 
   // ---------- Tabs ----------
 
-  const TABS = ['today', 'food', 'recipes', 'plan'];
+  const TABS = ['today', 'food', 'recipes', 'plan', 'shop'];
 
   function showTab(name) {
     for (const tab of TABS) {
@@ -1791,6 +1935,7 @@ Method:
       if (!Array.isArray(parsed.recipes)) parsed.recipes = [];
       if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
       if (!Array.isArray(parsed.members)) parsed.members = [];
+      if (!Array.isArray(parsed.shopping)) parsed.shopping = [];
       if (!confirm('Replace your current food list, recipes and meal plan with the imported ones?')) return;
       data = parsed;
       save();
@@ -2028,7 +2173,7 @@ Method:
   // copy; save() sends only what changed, and changes from other phones arrive as snapshots.
 
   const HOUSEHOLD_KEY = 'wdywfd-household';
-  const COLLECTIONS = ['places', 'items', 'recipes', 'plan', 'members'];
+  const COLLECTIONS = ['places', 'items', 'recipes', 'plan', 'members', 'shopping'];
   const CODE_WORDS = ['APPLE', 'BASIL', 'BEAN', 'BERRY', 'BREAD', 'BROTH', 'BUTTER', 'CAKE', 'CARROT', 'CELERY',
     'CHEESE', 'CHERRY', 'CHILLI', 'CLOVE', 'COCOA', 'COCONUT', 'CORN', 'CREAM', 'CRUMB', 'CURRY', 'DATE', 'DILL',
     'DUMPLING', 'FENNEL', 'FUDGE', 'GARLIC', 'GINGER', 'GRAPE', 'GRAVY', 'HAZEL', 'HONEY', 'JAM', 'KALE', 'KIWI',
@@ -2118,7 +2263,7 @@ Method:
             if (id in before) synced[name][id] = before[id];
             else delete synced[name][id];
           }
-          setHouseholdChip(name === 'members' ? 'profiles not shared yet' : 'couldn’t sync your last change');
+          setHouseholdChip(name === 'members' ? 'profiles not shared yet' : name === 'shopping' ? 'shopping list not shared yet' : 'couldn’t sync your last change');
         });
       }
     }
@@ -2174,7 +2319,7 @@ Method:
       unsubscribers.push(mod.onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
         // Profiles were added later, so an empty cached copy may just mean the server hasn't
         // answered (or older rules refuse them). Keep this phone's profiles until it does.
-        if (name === 'members' && snap.empty && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
+        if (['members', 'shopping'].includes(name) && snap.empty && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
         const docs = {};
         const seen = {};
         snap.forEach((d) => { docs[d.id] = d.data(); seen[d.id] = stable(d.data()); });
@@ -2187,7 +2332,7 @@ Method:
       }, () => {
         // Still let the other lists sync if this one is refused (e.g. older security rules).
         ready.add(name);
-        setHouseholdChip(name === 'members' ? 'profiles not shared yet' : 'can’t reach the household');
+        setHouseholdChip(name === 'members' ? 'profiles not shared yet' : name === 'shopping' ? 'shopping list not shared yet' : 'can’t reach the household');
       }));
     }
   }
