@@ -1194,19 +1194,186 @@ Method:
     renderShopping();
   }
 
-  // Ingredients for the given meals (this week's by default) that aren't in stock, merged by line.
-  function shoppingList(recipes = plannedRecipes()) {
-    const needed = new Map();
-    for (const recipe of recipes) {
-      for (const line of recipe.ingredients) {
-        if (stockFor(line)) continue;
-        const key = line.toLowerCase();
-        if (!needed.has(key)) needed.set(key, { line, type: guessType(line), recipes: new Set() });
-        needed.get(key).recipes.add(recipe.name);
+  // ---------- Ingredient amounts ----------
+  //
+  // Reads "200g egg noodles", "2 tbsp soy sauce", "1 tin chopped tomatoes", "4 chicken thighs"
+  // into an amount, a unit and the ingredient, so the shopping list can add up what several
+  // meals need and take off what's already in stock.
+
+  const FRACTIONS = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125 };
+  // unit word -> [family, how many base units one of it is]
+  const UNITS = {
+    g: ['g', 1], gram: ['g', 1], grams: ['g', 1], kg: ['g', 1000], kilo: ['g', 1000], kilos: ['g', 1000], oz: ['g', 28.35], lb: ['g', 453.6], lbs: ['g', 453.6],
+    ml: ['ml', 1], millilitre: ['ml', 1], millilitres: ['ml', 1], cl: ['ml', 10], l: ['ml', 1000], litre: ['ml', 1000], litres: ['ml', 1000], liter: ['ml', 1000], liters: ['ml', 1000],
+    tsp: ['tsp', 1], teaspoon: ['tsp', 1], teaspoons: ['tsp', 1], tbsp: ['tsp', 3], tablespoon: ['tsp', 3], tablespoons: ['tsp', 3],
+    cup: ['cup', 1], cups: ['cup', 1],
+    tin: ['tin', 1], tins: ['tin', 1], can: ['tin', 1], cans: ['tin', 1],
+    pack: ['pack', 1], packs: ['pack', 1], packet: ['pack', 1], packets: ['pack', 1],
+    jar: ['jar', 1], jars: ['jar', 1], bottle: ['bottle', 1], bottles: ['bottle', 1], bag: ['bag', 1], bags: ['bag', 1],
+    bunch: ['bunch', 1], bunches: ['bunch', 1], handful: ['handful', 1], handfuls: ['handful', 1],
+    slice: ['slice', 1], slices: ['slice', 1], clove: ['clove', 1], cloves: ['clove', 1], pinch: ['pinch', 1], pinches: ['pinch', 1],
+    sprig: ['sprig', 1], sprigs: ['sprig', 1], sachet: ['sachet', 1], sachets: ['sachet', 1], stick: ['stick', 1], sticks: ['stick', 1],
+  };
+  const UNIT_WORDS = Object.keys(UNITS).sort((a, b) => b.length - a.length).join('|');
+  const SIZE_WORDS = /\b(large|small|medium|big|fresh|ripe|free.range|organic|skinless|boneless|good.quality|heaped|level|rounded)\b/g;
+
+  function readNumber(text) {
+    const t = text.trim();
+    if (FRACTIONS[t] !== undefined) return FRACTIONS[t];
+    const mixed = t.match(/^(\d+)\s*([½¼¾⅓⅔⅛])$/) || t.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+    if (mixed) return Number(mixed[1]) + (mixed[3] ? Number(mixed[2]) / Number(mixed[3]) : FRACTIONS[mixed[2]]);
+    const frac = t.match(/^(\d+)\/(\d+)$/);
+    if (frac) return Number(frac[1]) / Number(frac[2]);
+    const n = parseFloat(t.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const NUMBER = '(\\d+\\s+\\d+\\/\\d+|\\d+\\s*[½¼¾⅓⅔⅛]|\\d+\\/\\d+|\\d+(?:[.,]\\d+)?|[½¼¾⅓⅔⅛])';
+  const AMOUNT_RE = new RegExp(`^${NUMBER}(?:\\s*(?:-|–|to)\\s*${NUMBER})?\\s*(?:(${UNIT_WORDS})\\b\\.?)?\\s*`, 'i');
+
+  function parseIngredient(line) {
+    let rest = line.trim().replace(/^[\s•●▪◦*·\-–—]+/, '');
+    let qty = null;
+    let unit = null;
+    let countBeforeSize = null;
+    const first = rest.match(AMOUNT_RE);
+    if (first) {
+      qty = readNumber(first[2] || first[1]);   // "2-3" counts as 3
+      unit = first[3] ? first[3].toLowerCase() : null;
+      rest = rest.slice(first[0].length);
+      // "2 x 400g tins of tomatoes": multiply out.
+      const times = rest.match(new RegExp(`^(?:x|×)\\s*${NUMBER}\\s*(?:(${UNIT_WORDS})\\b\\.?)?\\s*`, 'i'));
+      if (times && !unit) {
+        countBeforeSize = qty;
+        qty *= readNumber(times[1]);
+        unit = times[2] ? times[2].toLowerCase() : null;
+        rest = rest.slice(times[0].length);
       }
     }
+    // "400g tin of tomatoes" or "2 x 400g tins": count the tins, packs or jars, as you'd buy them.
+    const container = first && rest.match(/^(tins?|cans?|packs?|packets?|jars?|bottles?|bags?)\b\s*/i);
+    if (container && unit && UNITS[unit] && ['g', 'ml'].includes(UNITS[unit][0])) {
+      qty = countBeforeSize !== null ? countBeforeSize : 1;
+      unit = container[1].toLowerCase();
+      rest = rest.slice(container[0].length);
+    }
+    rest = rest.replace(/^of\s+/i, '');
+    let name = rest.split(/,|\s\(|;/)[0].trim().replace(/\s+(to serve|optional)$/i, '');
+    // "2 garlic cloves": the unit comes after the name.
+    const after = !unit && name.match(/^(.*?)\s+(cloves?|slices?|sprigs?)$/i);
+    if (after) { name = after[1]; unit = after[2].toLowerCase(); }
+    const [family, factor] = unit && UNITS[unit] ? UNITS[unit] : ['each', 1];
+    const base = qty === null ? null : qty * factor;
+    const key = singular(name.toLowerCase().replace(SIZE_WORDS, ' ').replace(/\s+/g, ' ').trim());
+    return { name: name || line.trim(), key, family, amount: base };
+  }
+
+  const keysMatch = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a)));
+
+  function trimNumber(n) {
+    return String(Math.round(n * 100) / 100);
+  }
+
+  function pluralWord(word, n) {
+    if (n === 1 || /s$/i.test(word)) return word;
+    if (/(ch|sh|x)$/i.test(word)) return `${word}es`;
+    if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
+    if (/(tomato|potato|mango)$/i.test(word)) return `${word}es`;
+    return `${word}s`;
+  }
+
+  // One family's total, written the way a shopping list would: "1.2kg", "2 tbsp", "3 tins".
+  function totalText(family, total, name) {
+    if (family === 'g') return total >= 1000 ? `${trimNumber(total / 1000)}kg ${name}` : `${trimNumber(total)}g ${name}`;
+    if (family === 'ml') return total >= 1000 ? `${trimNumber(total / 1000)}L ${name}` : `${trimNumber(total)}ml ${name}`;
+    if (family === 'tsp') {
+      const tbsp = Math.floor(total / 3 + 1e-9);
+      const tsp = Math.round((total - tbsp * 3) * 100) / 100;
+      const parts = [tbsp ? `${tbsp} tbsp` : null, tsp ? `${trimNumber(tsp)} tsp` : null].filter(Boolean);
+      return `${parts.join(' + ')} ${name}`;
+    }
+    if (family === 'each') {
+      const words = name.split(' ');
+      words[words.length - 1] = pluralWord(words[words.length - 1], total);
+      return `${trimNumber(total)} ${words.join(' ')}`;
+    }
+    if (family === 'clove') return `${trimNumber(total)} ${name} ${pluralWord('clove', total)}`;
+    return `${trimNumber(total)} ${pluralWord(family, total)} ${name}`;
+  }
+
+  // How much of an ingredient is in Food, in the same family, or "covered" if it's there in a
+  // unit we can't compare (so it doesn't end up on the list, as before).
+  function stockAmount(key, family) {
+    let total = 0;
+    let covered = false;
+    for (const item of data.items) {
+      if (!(item.qty > 0)) continue;
+      const d = warnDays(item);
+      if (d !== null && d < 0) continue;   // gone off doesn't count
+      const food = parseIngredient(item.name).key;
+      if (!keysMatch(food, key)) continue;
+      const unit = (item.unit || '').trim().toLowerCase().replace(/\.$/, '');
+      const [fam, factor] = !unit || unit === 'items' || unit === 'item' ? ['each', 1] : UNITS[unit] || [unit, 1];
+      if (fam === family) total += item.qty * factor;
+      else covered = true;
+    }
+    return { total, covered };
+  }
+
+  // What the given meals (this week's by default) need that isn't in stock: one line per
+  // ingredient, with the amounts added up across every meal it's in.
+  function shoppingList(recipes = plannedRecipes()) {
+    const byKey = new Map();
+    for (const recipe of recipes) {
+      const counted = new Set();
+      for (const line of recipe.ingredients) {
+        if (!line.trim()) continue;
+        const p = parseIngredient(line);
+        if (p.key.length < 2) continue;
+        let entry = [...byKey.values()].find((e) => keysMatch(e.key, p.key));
+        if (!entry) {
+          entry = { key: p.key, name: p.name, type: guessType(line), amounts: {}, unmeasured: false, uses: new Map() };
+          byKey.set(p.key, entry);
+        }
+        if (p.amount === null) entry.unmeasured = true;
+        else entry.amounts[p.family] = (entry.amounts[p.family] || 0) + p.amount;
+        if (!counted.has(entry)) {
+          counted.add(entry);
+          entry.uses.set(recipe.name, (entry.uses.get(recipe.name) || 0) + 1);
+        }
+      }
+    }
+    const out = [];
+    for (const entry of byKey.values()) {
+      const parts = [];
+      const need = {};
+      let anyStock = false;
+      for (const [family, total] of Object.entries(entry.amounts)) {
+        const have = stockAmount(entry.key, family);
+        if (have.covered && !have.total) { anyStock = true; continue; }
+        const left = total - have.total;
+        if (have.total) anyStock = true;
+        if (left > 0.0001) { parts.push(totalText(family, left, entry.name)); need[family] = left; }
+      }
+      if (!Object.keys(entry.amounts).length) {
+        // No amounts given anywhere: just the name, unless it's in stock.
+        if (stockFor(entry.name)) continue;
+        parts.push(entry.name.charAt(0).toUpperCase() + entry.name.slice(1));
+      } else if (!parts.length) {
+        continue;   // stock covers it
+      }
+      if (!parts.length && anyStock) continue;
+      out.push({
+        line: parts.join(' + '),
+        name: entry.name,
+        need,
+        key: entry.key,
+        type: entry.type,
+        recipes: [...entry.uses].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)),
+      });
+    }
     const order = FOOD_TYPES.map(([id]) => id);
-    return [...needed.values()].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+    return out.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
   }
 
   function shoppingByType(list) {
@@ -1217,15 +1384,15 @@ Method:
   // Plan tab: what this week's meals need that isn't in stock or on the shopping list yet.
   function renderShopping() {
     const all = shoppingList();
-    const list = all.filter(({ line }) => !onShoppingList(line));
+    const list = all.filter((entry) => needStatus(entry) !== 'covered');
     const planned = plannedRecipes().length;
     $('#shopping').replaceChildren(...shoppingByType(list).map(({ icon, label, lines }) =>
       el('li', { class: 'shopping-group' },
         el('h3', {}, `${icon} ${label}`),
         el('ul', { class: 'suggest-list' }, lines.map(({ line, recipes }) =>
           el('li', {},
-            el('span', {}, line, el('span', { class: 'for' }, ` · for ${[...recipes].join(', ')}`)),
-            el('button', { type: 'button', class: 'btn btn-small', onclick: () => { addToShopping(line, [...recipes].join(', ')); save(); render(); } }, '+ List')))))));
+            el('span', {}, line, el('span', { class: 'for' }, ` · for ${recipes.join(', ')}`)),
+            el('button', { type: 'button', class: 'btn btn-small', onclick: () => { addNeeded(lines.find((x) => x.line === line)); save(); render(); } }, '+ List')))))));
     $('#shopping-empty').hidden = list.length > 0;
     $('#shopping-empty').textContent = !planned
       ? 'Pick some meals above and anything you don’t have in stock will be listed here.'
@@ -1234,7 +1401,7 @@ Method:
   }
 
   $('#copy-shopping').addEventListener('click', () => {
-    for (const { line, recipes } of shoppingList()) addToShopping(line, [...recipes].join(', '));
+    for (const entry of shoppingList()) addNeeded(entry);
     save();
     render();
   });
@@ -1385,16 +1552,67 @@ Method:
   // A list the household adds to: by hand, from a meal's missing ingredients, or from the
   // suggestions for planned meals. Ticked items can be moved into Food once you're home.
 
-  const shopKey = (text) => singular(ingredientName(text) || text);
+  const shopKey = (text) => parseIngredient(text).key;
+
+  function listItemFor(key) {
+    if (key.length < 2) return null;
+    return data.shopping.find((s) => !s.done && keysMatch(shopKey(s.name), key)) || null;
+  }
 
   function onShoppingList(text) {
-    const key = shopKey(text);
-    if (key.length < 2) return false;
-    return data.shopping.some((s) => {
-      if (s.done) return false;
-      const other = shopKey(s.name);
-      return other === key || (other.length >= 3 && key.includes(other)) || (key.length >= 3 && other.includes(key));
-    });
+    return !!listItemFor(shopKey(text));
+  }
+
+  // The amounts already on a list item, e.g. "1 tin chopped tomatoes + 400g chopped tomatoes".
+  function listAmounts(item) {
+    const amounts = {};
+    for (const part of item.name.split(' + ')) {
+      const p = parseIngredient(part);
+      if (p.amount !== null) amounts[p.family] = (amounts[p.family] || 0) + p.amount;
+    }
+    return amounts;
+  }
+
+  // For an ingredient the meal plan needs: 'new' if it's not on the list, 'update' if a
+  // meal-plan item for it should change, 'covered' if it's there already (or the person
+  // added it themselves, which we leave alone). 'exact' (Fill from meal plan) sets the
+  // amount for the dates picked; 'atleast' (suggestions) only ever asks for more.
+  function needStatus(entry, mode = 'atleast') {
+    const item = listItemFor(entry.key);
+    if (!item) return 'new';
+    if (!item.fromPlan) return 'covered';
+    if (mode === 'exact') return item.name !== entry.line ? 'update' : 'covered';
+    const have = listAmounts(item);
+    return Object.entries(entry.need || {}).some(([family, n]) => n > (have[family] || 0) + 0.0001) ? 'update' : 'covered';
+  }
+
+  // Put a meal-plan ingredient on the list, or update the amount if it's already there.
+  function addNeeded(entry, mode = 'atleast') {
+    if (!entry) return 'covered';
+    const status = needStatus(entry, mode);
+    const note = entry.recipes.join(', ').slice(0, 120);
+    if (status === 'new') {
+      data.shopping.push({ id: uid(), name: entry.line.slice(0, 120), type: entry.type, done: false, note, fromPlan: true, addedBy: myId(), added: new Date().toISOString() });
+    } else if (status === 'update') {
+      const item = listItemFor(entry.key);
+      if (mode === 'exact' || !entry.need) {
+        item.name = entry.line.slice(0, 120);
+        item.note = note;
+      } else {
+        // Keep whichever is bigger for each kind of amount, so a suggestion never lowers it.
+        const have = listAmounts(item);
+        const merged = { ...have };
+        for (const [family, n] of Object.entries(entry.need)) merged[family] = Math.max(n, have[family] || 0);
+        item.name = Object.entries(merged).map(([family, n]) => totalText(family, n, entry.name)).join(' + ').slice(0, 120);
+        const notes = new Set([...(item.note ? item.note.split(', ') : []), ...entry.recipes]);
+        item.note = [...notes].join(', ').slice(0, 120);
+      }
+      item.type = entry.type;
+    }
+    // Tidy up any repeats of the same ingredient left from before.
+    const keep = listItemFor(entry.key);
+    data.shopping = data.shopping.filter((s) => s === keep || s.done || !s.fromPlan || !keysMatch(shopKey(s.name), entry.key));
+    return status;
   }
 
   function addToShopping(name, note) {
@@ -1420,7 +1638,7 @@ Method:
   }
 
   function shopSuggestions() {
-    return upcomingShopping().list.filter(({ line }) => !onShoppingList(line));
+    return upcomingShopping().list.filter((entry) => needStatus(entry) !== 'covered');
   }
 
   function renderShopList(container, prefix) {
@@ -1462,9 +1680,9 @@ Method:
       el('p', { class: 'ai-status', id: `${prefix}-shop-flash`, role: 'status', hidden: 'hidden' }),
       suggestions.length
         ? el('div', { class: 'shop-suggest' },
-            el('span', {}, `${suggestions.length} thing${suggestions.length === 1 ? '' : 's'} for the next 7 days of meals ${suggestions.length === 1 ? 'isn’t' : 'aren’t'} in stock or on the list.`),
+            el('span', {}, `${plural(suggestions.length, 'thing', 'things')} for the next 7 days of meals ${suggestions.length === 1 ? 'needs' : 'need'} adding to the list, or more of.`),
             el('button', { type: 'button', class: 'btn btn-small', onclick: () => {
-              for (const { line, recipes } of suggestions) addToShopping(line, [...recipes].join(', '));
+              for (const entry of suggestions) addNeeded(entry);
               save();
               render();
             } }, 'Add them'))
@@ -1550,7 +1768,7 @@ Method:
         recipes.push(...dishes);
       }
     }
-    const needed = shoppingList(recipes).filter(({ line }) => !onShoppingList(line));
+    const needed = shoppingList(recipes).filter((entry) => needStatus(entry, 'exact') !== 'covered');
     return { meals, needed };
   }
 
@@ -1576,11 +1794,11 @@ Method:
     summary.textContent = !meals
       ? 'No meals are planned for those dates yet.'
       : needed.length
-        ? `${plural(meals, 'meal', 'meals')} planned. ${plural(needed.length, 'thing isn’t', 'things aren’t')} in stock or on the list:`
+        ? `${plural(meals, 'meal', 'meals')} planned. You need to get ${plural(needed.length, 'thing', 'things')} (amounts are totals for these dates, minus what's in Food):`
         : `${plural(meals, 'meal', 'meals')} planned, and you already have or are getting everything for them.`;
     const shown = needed.slice(0, 8);
     preview.replaceChildren(...shown.map(({ line, recipes }) =>
-      el('li', {}, line, el('span', { class: 'for' }, ` · ${[...recipes].join(', ')}`))),
+      el('li', {}, line, el('span', { class: 'for' }, ` · ${recipes.join(', ')}`))),
       ...(needed.length > shown.length ? [el('li', { class: 'muted' }, `and ${needed.length - shown.length} more`)] : []));
     button.disabled = needed.length === 0;
     button.textContent = needed.length ? `Add ${plural(needed.length, 'thing', 'things')} to list` : 'Add to list';
@@ -1601,10 +1819,16 @@ Method:
     const result = fillRange();
     if (!result || result.error || !result.needed.length) return;
     let added = 0;
-    for (const { line, recipes } of result.needed) if (addToShopping(line, [...recipes].join(', '))) added++;
+    let updated = 0;
+    for (const entry of result.needed) {
+      const status = addNeeded(entry, 'exact');
+      if (status === 'new') added++;
+      if (status === 'update') updated++;
+    }
     save();
     render();
-    flashShop('tab', `Added ${plural(added, 'thing', 'things')} to your shopping list.`);
+    flashShop('tab', [added ? `Added ${plural(added, 'thing', 'things')}` : null, updated ? `updated the amount of ${plural(updated, 'thing', 'things')}` : null]
+      .filter(Boolean).join(' and ').replace(/^./, (c) => c.toUpperCase()) + '.');
   });
 
   // When a meal is added to the plan, ask about any ingredients that aren't in stock.
@@ -1642,7 +1866,11 @@ Method:
     for (const rowEl of document.querySelectorAll('#missing-list .missing-row')) {
       const choice = rowEl.querySelector('.missing-choice');
       const line = choice.dataset.line;
-      if (choice.value === 'shop' && addToShopping(line, missingRecipe.name)) shop++;
+      if (choice.value === 'shop') {
+        const p = parseIngredient(line);
+        const entry = { line: p.amount === null ? p.name.charAt(0).toUpperCase() + p.name.slice(1) : totalText(p.family, p.amount, p.name), key: p.key, type: guessType(line), recipes: [missingRecipe.name] };
+        if (addNeeded(entry) !== 'covered') shop++;
+      }
       if (choice.value === 'have') { foodFromText(line, rowEl.querySelector('.missing-place').value); have++; }
     }
     missingRecipe = null;
