@@ -32,6 +32,40 @@
   const KIND_INFO = Object.fromEntries(KINDS.map(([id, icon, label, plural]) => [id, { icon, label, plural }]));
   const kindOf = (recipe) => (KIND_INFO[recipe.course] ? recipe.course : 'meal');
 
+  // Recipe categories. A recipe can have any number; anything not in this list is the
+  // person's own category, stored as they typed it.
+  const CATEGORY_GROUPS = [
+    ['Cuisine', [['asian', '🥢', 'Asian'], ['italian', '🍝', 'Italian'], ['mexican', '🌮', 'Mexican'], ['indian', '🍛', 'Indian'],
+      ['british', '🫖', 'British'], ['mediterranean', '🫒', 'Mediterranean'], ['american', '🍔', 'American'],
+      ['middle-eastern', '🧆', 'Middle Eastern'], ['french', '🥐', 'French']]],
+    ['Season', [['spring', '🌷', 'Spring'], ['summer', '☀️', 'Summer'], ['autumn', '🍂', 'Autumn'], ['winter', '❄️', 'Winter'], ['christmas', '🎄', 'Christmas']]],
+    ['Diet', [['vegetarian', '🥕', 'Vegetarian'], ['vegan', '🌱', 'Vegan'], ['healthy', '🥗', 'Healthy'], ['gluten-free', '🌾', 'Gluten free']]],
+    ['Occasion', [['quick', '⚡', 'Quick'], ['comfort', '🛋️', 'Comfort food'], ['fakeaway', '🥡', 'Fakeaway'], ['batch', '🍲', 'Batch cook'],
+      ['slow-cooker', '⏲️', 'Slow cooker'], ['bbq', '🔥', 'BBQ'], ['roast', '🍖', 'Sunday roast'], ['kids', '🧒', 'Kid friendly'], ['hosting', '🎉', 'Hosting']]],
+  ];
+  const CATEGORY_INFO = Object.fromEntries(CATEGORY_GROUPS.flatMap(([, cats]) => cats.map(([id, icon, label]) => [id, { icon, label }])));
+  const catLabel = (tag) => (CATEGORY_INFO[tag] ? `${CATEGORY_INFO[tag].icon} ${CATEGORY_INFO[tag].label}` : `🏷️ ${tag}`);
+  const tagsOf = (recipe) => (Array.isArray(recipe.tags) ? recipe.tags : []);
+
+  // Match a typed category ("asian", "Slow Cooker") to a built-in one, or keep it as the person's own.
+  function categoryFor(text) {
+    const t = text.trim().replace(/[^\p{L}\p{N}\s'&-]/gu, '').trim();
+    if (!t) return null;
+    const key = t.toLowerCase().replace(/\s+/g, ' ');
+    for (const [id, info] of Object.entries(CATEGORY_INFO)) {
+      if (key === id.replace('-', ' ') || key === info.label.toLowerCase()) return id;
+    }
+    if (key === 'veggie') return 'vegetarian';
+    if (key === 'slow cook') return 'slow-cooker';
+    return t.slice(0, 30);
+  }
+
+  // UK seasons by month.
+  function currentSeason(date = new Date()) {
+    const m = date.getMonth();
+    return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter';
+  }
+
   // Kinds of food, in rough supermarket order (used to group the shopping list).
   const FOOD_TYPES = [
     ['produce', '🥦', 'Fruit & veg'],
@@ -351,12 +385,15 @@
     const query = $('#recipe-search').value.trim().toLowerCase();
     const level = $('#recipe-difficulty').value;
     const kind = $('#recipe-kind').value;
+    const cat = $('#recipe-cat').value;
+    renderCategoryFilter();
     const sort = $('#recipe-sort').value;
     container.replaceChildren();
 
     let list = data.recipes
       .filter((r) => !level || r.difficulty === level)
       .filter((r) => !kind || kindOf(r) === kind)
+      .filter((r) => !cat || (cat === '@season' ? tagsOf(r).includes(currentSeason()) : tagsOf(r).includes(cat)))
       .filter((r) => !query || r.name.toLowerCase().includes(query) ||
         r.ingredients.some((i) => i.toLowerCase().includes(query)))
       .map((r) => ({ recipe: r, stock: recipeStock(r) }));
@@ -411,15 +448,17 @@
     let labelledName = false;
     let difficulty = null;
     let time = null;
+    let tags = [];
     const ingredients = [];
     const method = [];
     let section = null;
     for (const line of lines) {
-      const label = line.match(/^(name|recipe|difficulty|(?:total\s+)?time)\s*:\s*(.+)$/i);
+      const label = line.match(/^(name|recipe|difficulty|(?:total\s+)?time|categories|category|tags)\s*:\s*(.+)$/i);
       if (label && section !== 'method') {
         const key = label[1].toLowerCase();
         if (key === 'name' || key === 'recipe') { name = clean(label[2]); labelledName = true; }
         else if (key === 'difficulty') difficulty = (label[2].match(/easy|medium|hard/i) || [''])[0].toLowerCase() || null;
+        else if (/^(categories|category|tags)$/.test(key)) tags = label[2].split(/[,;/]/).map(categoryFor).filter(Boolean);
         else time = parseMinutes(label[2]);
         continue;
       }
@@ -431,7 +470,7 @@
       else if (looksLikeIngredient(line)) ingredients.push(clean(line));
       else if (looksLikeStep(line)) method.push(line);
     }
-    return { name: name.slice(0, 100), labelledName, difficulty, time, ingredients: ingredients.filter(Boolean), method: method.join('\n') };
+    return { name: name.slice(0, 100), labelledName, difficulty, time, tags, ingredients: ingredients.filter(Boolean), method: method.join('\n') };
   }
 
   // "1 hr 30 min", "45 minutes", "1.5 hours" -> minutes.
@@ -466,6 +505,11 @@
               allIn ? 'You have everything' : `You have ${stock.have} of ${stock.total} ingredients`)
           : el('span', { class: 'badge' }, 'No ingredients added yet'),
       ),
+      tagsOf(recipe).length
+        ? el('div', { class: 'cat-chips' },
+            tagsOf(recipe).includes(currentSeason()) ? el('span', { class: 'cat-chip in-season' }, 'In season') : null,
+            tagsOf(recipe).map((tag) => el('span', { class: 'cat-chip' }, catLabel(tag))))
+        : null,
       recipe.source && sourceLabel(recipe.source)
         ? el('a', { class: 'source-link', href: recipe.source, target: '_blank', rel: 'noopener' }, `Open on ${sourceLabel(recipe.source)} ↗`)
         : null,
@@ -490,6 +534,10 @@
     $('#recipe-name').value = recipe?.name ?? shared?.name ?? '';
     $('#recipe-level').value = recipe?.difficulty ?? 'easy';
     $('#recipe-course').value = recipe ? kindOf(recipe) : 'meal';
+    pendingTags = new Set(recipe ? tagsOf(recipe) : []);
+    $('#cat-custom').value = '';
+    $('#cat-picker').open = false;
+    renderCategoryPicker();
     $('#recipe-time').value = recipe?.time ?? '';
     $('#recipe-ingredients').value = recipe ? recipe.ingredients.join('\n') : '';
     $('#recipe-method').value = recipe?.method ?? '';
@@ -506,6 +554,7 @@
       source: firstUrl($('#recipe-source').value) || null,
       difficulty: $('#recipe-level').value,
       course: $('#recipe-course').value,
+      tags: [...pendingTags],
       time: time > 0 ? time : null,
       ingredients: $('#recipe-ingredients').value.split('\n').map((l) => l.trim()).filter(Boolean),
       method: $('#recipe-method').value.trim(),
@@ -559,6 +608,10 @@
     if (parsed.name && (parsed.labelledName || !$('#recipe-name').value.trim())) $('#recipe-name').value = parsed.name;
     if (parsed.difficulty) $('#recipe-level').value = parsed.difficulty;
     if (parsed.time) $('#recipe-time').value = parsed.time;
+    if (parsed.tags.length) {
+      parsed.tags.forEach((tag) => pendingTags.add(tag));
+      renderCategoryPicker();
+    }
     if (parsed.ingredients.length) $('#recipe-ingredients').value = parsed.ingredients.join('\n');
     if (parsed.method) $('#recipe-method').value = parsed.method;
     if (!parsed.ingredients.length && !parsed.method) {
@@ -593,6 +646,7 @@ Reply with only the recipe in exactly this layout, as plain text with no bold, h
 Name: <recipe name>
 Difficulty: <Easy, Medium or Hard>
 Time: <total minutes> minutes
+Categories: <the ones that fit, comma separated, from: ${CATEGORY_GROUPS.flatMap(([, cats]) => cats.map(([, , label]) => label)).join(', ')}>
 Ingredients:
 - <amount and ingredient>
 Method:
@@ -638,6 +692,51 @@ Method:
   $('#recipe-kind').append(...KINDS.map(([id, icon, , plural]) => el('option', { value: id }, `${icon} ${plural}`)));
   $('#recipe-kind').addEventListener('change', renderRecipes);
   $('#recipe-course').replaceChildren(...KINDS.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)));
+
+  // Category picker in the recipe form.
+  let pendingTags = new Set();
+
+  function renderCategoryPicker() {
+    const toggle = (tag) => {
+      if (pendingTags.has(tag)) pendingTags.delete(tag); else pendingTags.add(tag);
+      renderCategoryPicker();
+    };
+    const chip = (tag, text) => el('button', { type: 'button', class: `cat-option ${pendingTags.has(tag) ? 'selected' : ''}`, 'aria-pressed': String(pendingTags.has(tag)), onclick: () => toggle(tag) }, text);
+    const custom = [...new Set([...data.recipes.flatMap(tagsOf), ...pendingTags])].filter((t) => !CATEGORY_INFO[t]).sort();
+    $('#cat-groups').replaceChildren(
+      ...CATEGORY_GROUPS.flatMap(([group, cats]) => [
+        el('p', { class: 'picker-group' }, group),
+        el('div', { class: 'cat-options' }, cats.map(([id, icon, label]) => chip(id, `${icon} ${label}`))),
+      ]),
+      ...(custom.length ? [el('p', { class: 'picker-group' }, 'Your own'), el('div', { class: 'cat-options' }, custom.map((t) => chip(t, `🏷️ ${t}`)))] : []));
+    const chosen = [...pendingTags];
+    $('#cat-summary').textContent = chosen.length ? chosen.map(catLabel).join('  ') : 'None yet';
+  }
+
+  function addCustomCategory() {
+    const tag = categoryFor($('#cat-custom').value);
+    if (!tag) return;
+    pendingTags.add(tag);
+    $('#cat-custom').value = '';
+    renderCategoryPicker();
+  }
+  $('#cat-add').addEventListener('click', addCustomCategory);
+  $('#cat-custom').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomCategory(); } });
+
+  // Category filter on the Recipes tab (built-in ones, plus any of the household's own in use).
+  function renderCategoryFilter() {
+    const select = $('#recipe-cat');
+    const current = select.value;
+    const season = currentSeason();
+    const custom = [...new Set(data.recipes.flatMap(tagsOf))].filter((t) => !CATEGORY_INFO[t]).sort();
+    select.replaceChildren(
+      el('option', { value: '' }, 'All categories'),
+      el('option', { value: '@season' }, `${CATEGORY_INFO[season].icon} In season now (${CATEGORY_INFO[season].label})`),
+      ...CATEGORY_GROUPS.map(([group, cats]) => el('optgroup', { label: group }, cats.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)))),
+      custom.length ? el('optgroup', { label: 'Your own' }, custom.map((t) => el('option', { value: t }, `🏷️ ${t}`))) : null);
+    select.value = [...select.options].some((o) => o.value === current) ? current : '';
+  }
+  $('#recipe-cat').addEventListener('change', renderRecipes);
   $('#recipe-sort').addEventListener('change', renderRecipes);
 
   // ---------- Meal plan ----------

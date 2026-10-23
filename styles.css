@@ -583,3 +583,24 @@ dialog { max-height: calc(100dvh - 32px); }
 .tick-list label { margin: 0; overflow-wrap: anywhere; }
 .tick-list li.done label { text-decoration: line-through; color: var(--muted); }
 #recipe-view .recipe { border: none; padding: 0; }
+
+/* Recipe categories */
+.cat-picker { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
+.cat-picker summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.cat-picker summary .muted { font-weight: 400; margin-left: 6px; }
+.cat-picker[open] summary { margin-bottom: 4px; }
+.cat-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-option {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.cat-option.selected { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.cat-chip { font-size: 0.78rem; padding: 1px 8px; border-radius: 999px; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.cat-chip.in-season { background: var(--warn-bg); color: var(--warn); border-color: transparent; font-weight: 600; }

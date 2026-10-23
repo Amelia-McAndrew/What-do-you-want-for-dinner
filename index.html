@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
   <header class="site-header">
@@ -125,6 +125,9 @@
       <section class="toolbar">
         <div class="toolbar-group">
           <input type="search" id="recipe-search" placeholder="Search recipes or ingredients…" aria-label="Search recipes">
+          <select id="recipe-cat" aria-label="Filter by category">
+            <option value="">All categories</option>
+          </select>
           <select id="recipe-kind" aria-label="Filter by kind of recipe">
             <option value="">All kinds</option>
           </select>
@@ -302,6 +305,15 @@
         <select id="recipe-course"></select>
         <span class="muted field-hint">Choose a part (like a side or a sauce) to add it alongside other recipes in the meal plan.</span>
       </label>
+      <details class="cat-picker" id="cat-picker">
+        <summary>Categories <span class="muted" id="cat-summary">None yet</span></summary>
+        <div id="cat-groups"></div>
+        <p class="picker-group">Add your own</p>
+        <span class="input-with-btn">
+          <input type="text" id="cat-custom" maxlength="30" placeholder="e.g. Mum's favourites" aria-label="Your own category">
+          <button type="button" class="btn" id="cat-add">Add</button>
+        </span>
+      </details>
       <div class="row">
         <label>Difficulty
           <select id="recipe-level">
@@ -450,8 +462,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=18"></script>
-  <script src="firebase-config.js?v=18"></script>
-  <script src="app.js?v=18"></script>
+  <script src="avatars.js?v=19"></script>
+  <script src="firebase-config.js?v=19"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>
