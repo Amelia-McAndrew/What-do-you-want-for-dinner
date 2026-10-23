@@ -609,3 +609,13 @@ dialog { max-height: calc(100dvh - 32px); }
 .cat-suggest-row { margin: 6px 0; }
 #cat-suggest-status { margin: 0 0 6px; }
 #auto-cat-status { margin: 0 0 16px; }
+
+/* Sharing recipes */
+.recipe-head .btn-icon + .btn-icon { margin-left: -4px; }
+.share-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 12px; }
+.qr-box { background: #fff; padding: 8px; border-radius: 10px; width: min(260px, 100%); line-height: 0; }
+.qr-box svg { width: 100%; height: auto; display: block; }
+.qr-hint { margin: 0; font-size: 0.85rem; }
+#share-link { font-size: 0.8rem; }
+#shared-body .recipe { border: 1px solid var(--border); margin: 8px 0; }
+#shared-body p { margin: 0 0 8px; }

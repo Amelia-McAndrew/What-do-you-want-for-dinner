@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
   <header class="site-header">
@@ -432,9 +432,42 @@
     <form method="dialog">
       <div id="recipe-view-body"></div>
       <div class="dialog-actions">
+        <button type="button" class="btn" id="recipe-view-share">Share</button>
         <button type="button" class="btn" id="recipe-view-edit">Edit recipe</button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-primary" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Share a recipe -->
+  <dialog id="share-dialog">
+    <form method="dialog">
+      <h2 id="share-title">Share recipe</h2>
+      <p class="muted">Anyone with the link or QR code can open the recipe and save a copy, even if they don’t use the app yet.</p>
+      <div id="share-qr" class="share-qr"></div>
+      <label>Link
+        <input type="text" id="share-link" readonly>
+      </label>
+      <p id="share-status" class="ai-status" role="status" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-primary" id="share-native">Share…</button>
+        <button type="button" class="btn" id="share-copy">Copy link</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- A recipe someone shared -->
+  <dialog id="shared-dialog">
+    <form method="dialog">
+      <h2>Shared recipe</h2>
+      <div id="shared-body"></div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Not now</button>
+        <button type="button" class="btn btn-primary" id="shared-save">Save to my recipes</button>
       </div>
     </form>
   </dialog>
@@ -468,8 +501,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=20"></script>
-  <script src="firebase-config.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="avatars.js?v=21"></script>
+  <script src="firebase-config.js?v=21"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

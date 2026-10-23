@@ -545,6 +545,7 @@
     return el('article', { class: 'recipe' },
       el('div', { class: 'recipe-head' },
         el('h3', {}, addedByAvatar(recipe), recipe.name),
+        el('button', { type: 'button', class: 'btn btn-icon', title: 'Share recipe', 'aria-label': `Share ${recipe.name}`, onclick: () => openShareRecipe(recipe) }, '↗'),
         el('button', { type: 'button', class: 'btn btn-icon', title: 'Edit recipe', 'aria-label': `Edit ${recipe.name}`, onclick: () => openRecipeDialog(recipe) }, '✎'),
       ),
       el('div', { class: 'recipe-meta' },
@@ -1210,10 +1211,188 @@ Method:
     const card = renderRecipe(recipe, recipeStock(recipe));
     const details = card.querySelector('details');
     if (details) details.open = true;
-    card.querySelector('.recipe-head button')?.remove();
+    card.querySelectorAll('.recipe-head button').forEach((b) => b.remove());
     $('#recipe-view-body').replaceChildren(card);
     recipeView.showModal();
   }
+
+  $('#recipe-view-share').addEventListener('click', () => {
+    recipeView.close();
+    if (viewing) openShareRecipe(viewing);
+  });
+
+  // ---------- Sharing a recipe by link or QR code ----------
+  //
+  // The recipe itself travels in the link (#recipe=...), compressed where the browser can, so
+  // anyone can open it: no account, household or server needed.
+
+  const SHARE_FIELDS = ['name', 'course', 'difficulty', 'time', 'ingredients', 'method', 'source', 'tags'];
+  const QR_MAX = 2000;   // longer links make QR codes too dense to scan reliably
+
+  function toBase64Url(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function fromBase64Url(text) {
+    const bin = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  }
+
+  async function pipeThrough(bytes, stream) {
+    const out = new Response(new Blob([bytes]).stream().pipeThrough(stream));
+    return new Uint8Array(await out.arrayBuffer());
+  }
+
+  async function encodeRecipe(recipe) {
+    const payload = {};
+    for (const key of SHARE_FIELDS) {
+      const value = recipe[key];
+      if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && !value.length)) payload[key] = value;
+    }
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    if (typeof CompressionStream === 'function') {
+      try { return `z${toBase64Url(await pipeThrough(bytes, new CompressionStream('deflate-raw')))}`; } catch (e) { /* fall back */ }
+    }
+    return `j${toBase64Url(bytes)}`;
+  }
+
+  async function decodeRecipe(code) {
+    let bytes = fromBase64Url(code.slice(1));
+    if (code[0] === 'z') {
+      if (typeof DecompressionStream !== 'function') throw new Error('old-browser');
+      bytes = await pipeThrough(bytes, new DecompressionStream('deflate-raw'));
+    } else if (code[0] !== 'j') {
+      throw new Error('bad-link');
+    }
+    const raw = JSON.parse(new TextDecoder().decode(bytes));
+    if (!raw || typeof raw.name !== 'string' || !raw.name.trim()) throw new Error('bad-link');
+    // Only keep the fields a recipe has, in the shapes the app expects.
+    const recipe = {
+      name: raw.name.trim().slice(0, 120),
+      course: KIND_INFO[raw.course] ? raw.course : 'meal',
+      difficulty: DIFFICULTY[raw.difficulty] ? raw.difficulty : 'easy',
+      time: Number.isFinite(raw.time) && raw.time > 0 ? Math.round(raw.time) : null,
+      ingredients: Array.isArray(raw.ingredients) ? raw.ingredients.filter((l) => typeof l === 'string').map((l) => l.slice(0, 200)).slice(0, 100) : [],
+      method: typeof raw.method === 'string' ? raw.method.slice(0, 10000) : '',
+      source: typeof raw.source === 'string' && /^https?:\/\//.test(raw.source) ? raw.source : null,
+      tags: Array.isArray(raw.tags) ? raw.tags.filter((t) => typeof t === 'string').map((t) => t.slice(0, 30)).slice(0, 20) : [],
+    };
+    return recipe;
+  }
+
+  let qrLibrary = null;
+  function loadQrLibrary() {
+    if (window.qrcode) return Promise.resolve(window.qrcode);
+    if (!qrLibrary) {
+      qrLibrary = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'vendor/qrcode.js';
+        script.onload = () => resolve(window.qrcode);
+        script.onerror = () => { qrLibrary = null; reject(new Error('qr')); };
+        document.head.append(script);
+      });
+    }
+    return qrLibrary;
+  }
+
+  const shareDialog = $('#share-dialog');
+  let shareLink = '';
+  let shareName = '';
+
+  async function openShareRecipe(recipe) {
+    shareName = recipe.name;
+    $('#share-title').textContent = `Share ${recipe.name}`;
+    $('#share-qr').replaceChildren(el('p', { class: 'muted' }, 'Making the QR code…'));
+    $('#share-link').value = '';
+    $('#share-status').hidden = true;
+    shareDialog.showModal();
+    shareLink = `${location.origin}${location.pathname}#recipe=${await encodeRecipe(recipe)}`;
+    $('#share-link').value = shareLink;
+    $('#share-native').hidden = !navigator.share;
+    if (shareLink.length > QR_MAX) {
+      $('#share-qr').replaceChildren(el('p', { class: 'muted' }, 'This recipe is too long for a QR code that phones can scan easily, so send the link instead.'));
+      return;
+    }
+    try {
+      const make = await loadQrLibrary();
+      const qr = make(0, 'L');
+      qr.addData(shareLink);
+      qr.make();
+      const box = el('div', { class: 'qr-box', role: 'img', 'aria-label': `QR code for ${recipe.name}` });
+      box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+      $('#share-qr').replaceChildren(box, el('p', { class: 'muted qr-hint' }, 'Scan with a phone camera to open the recipe.'));
+    } catch (e) {
+      $('#share-qr').replaceChildren(el('p', { class: 'muted' }, 'Couldn’t make a QR code here. You can still send the link.'));
+    }
+  }
+
+  function setShareStatus(text) {
+    $('#share-status').textContent = text;
+    $('#share-status').hidden = !text;
+  }
+
+  $('#share-native').addEventListener('click', async () => {
+    try {
+      await navigator.share({ title: shareName, text: `Here's my recipe for ${shareName}:`, url: shareLink });
+    } catch (e) {
+      if (e && e.name !== 'AbortError') setShareStatus('Couldn’t open the share menu. Copy the link instead.');
+    }
+  });
+
+  $('#share-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setShareStatus('Link copied. Paste it into a message.');
+    } catch (e) {
+      $('#share-link').select();
+      setShareStatus('Press and hold the link above and choose Copy.');
+    }
+  });
+
+  // Opened from a shared recipe link: preview it and offer to save a copy.
+  const sharedDialog = $('#shared-dialog');
+  let incoming = null;
+
+  async function handleSharedRecipe() {
+    const match = location.hash.match(/^#recipe=([A-Za-z0-9_-]+)$/);
+    if (!match) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      incoming = await decodeRecipe(match[1]);
+    } catch (e) {
+      incoming = null;
+      $('#shared-body').replaceChildren(el('p', {}, e.message === 'old-browser'
+        ? 'This phone’s browser is too old to open shared recipes. Updating it should fix this.'
+        : 'That recipe link didn’t work. It may have been cut short when it was copied. Ask for it to be sent again.'));
+      $('#shared-save').hidden = true;
+      sharedDialog.showModal();
+      return;
+    }
+    const card = renderRecipe({ id: 'incoming', ...incoming }, recipeStock(incoming));
+    card.querySelectorAll('.recipe-head button').forEach((b) => b.remove());
+    const already = data.recipes.some((r) => r.name.trim().toLowerCase() === incoming.name.toLowerCase());
+    $('#shared-body').replaceChildren(
+      el('p', { class: 'muted' }, 'Someone shared this recipe with you.'),
+      card,
+      already ? el('p', { class: 'muted' }, `You already have a recipe called ${incoming.name}. Saving adds a second copy.`) : null);
+    $('#shared-save').hidden = false;
+    sharedDialog.showModal();
+  }
+
+  $('#shared-save').addEventListener('click', () => {
+    if (!incoming) return;
+    data.recipes.push({ id: uid(), addedBy: myId(), ...incoming });
+    save();
+    render();
+    sharedDialog.close();
+    $('#shared-body').replaceChildren();
+    showTab('recipes');
+    incoming = null;
+  });
+
+  window.addEventListener('hashchange', handleSharedRecipe);
 
   $('#recipe-view-edit').addEventListener('click', () => {
     recipeView.close();
@@ -1996,6 +2175,7 @@ Method:
   connectHousehold();
   handleShare();
   handleInvite();
+  handleSharedRecipe();
 
   // Offline support and asking the browser not to clear our saved data.
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
