@@ -33,6 +33,34 @@
   const KIND_INFO = Object.fromEntries(KINDS.map(([id, icon, label, plural]) => [id, { icon, label, plural }]));
   const kindOf = (recipe) => (KIND_INFO[recipe.course] ? recipe.course : 'meal');
 
+  // Ready-made food: bought and just cooked or served (oven chips, garlic bread). Stored as a
+  // recipe whose one ingredient is itself, so stock, shopping and the meal plan all work.
+  const PREMADE_SUGGESTIONS = [
+    ['Oven chips', 25], ['Potato waffles', 15], ['Hash browns', 20], ['Garlic bread', 12], ['Coleslaw', 0],
+    ['Fish fingers', 15], ['Chicken nuggets', 20], ['Chicken kievs', 30], ['Frozen peas', 5], ['Sweetcorn', 5],
+    ['Yorkshire puddings', 5], ['Naan bread', 5], ['Microwave rice', 2], ['Onion rings', 15], ['Frozen pizza', 15],
+    ['Ready meal', 8], ['Instant mash', 5], ['Bagged salad', 0], ['Gravy granules', 2], ['Spring rolls', 20],
+    ['Onion bhajis', 15], ['Ice cream', 0], ['Cheesecake', 0], ['Apple pie', 25],
+  ];
+
+  // "2/4 in stock" for recipes; just "In stock" / "Not in stock" for ready-made food.
+  function stockLabel(recipe, stock, long = false) {
+    if (recipe.premade) return stock.have ? 'In stock' : 'Not in stock';
+    return `${stock.have}/${stock.total} ${long ? 'ingredients ' : ''}in stock`;
+  }
+
+  function premadeKind(name) {
+    const n = name.toLowerCase();
+    if (/yorkshire/.test(n)) return 'side';
+    if (/\b(ice cream|cheesecake|gateau|tart|cake|trifle|sponge|apple pie|crumble|pudding|brownies?|cookies?)\b/.test(n)) return 'dessert';
+    if (/\b(gravy|sauce|dip|houmous|hummus|salsa|mayo|ketchup|chutney|pesto)\b/.test(n)) return 'sauce';
+    if (/\b(spring rolls?|bhajis?|samosas?|prawn toast|soup)\b/.test(n)) return 'starter';
+    if (/\b(pizza|ready meal|lasagne|meal for one|pie|curry|cottage pie|shepherd)\b/.test(n)) return 'meal';
+    if (/\b(fish fingers|nuggets|kievs?|burgers?|sausages?|fishcakes?|goujons|breaded|scampi)\b/.test(n)) return 'main';
+    if (/\b(juice|squash|lemonade|cola)\b/.test(n)) return 'drink';
+    return 'side';
+  }
+
   // Recipe categories. A recipe can have any number; anything not in this list is the
   // person's own category, stored as they typed it.
   const CATEGORY_GROUPS = [
@@ -446,7 +474,7 @@
 
     let list = data.recipes
       .filter((r) => !level || r.difficulty === level)
-      .filter((r) => !kind || kindOf(r) === kind)
+      .filter((r) => !kind || (kind === '@premade' ? r.premade : kindOf(r) === kind))
       .filter((r) => !cat || (cat === '@season' ? tagsOf(r).includes(currentSeason()) : tagsOf(r).includes(cat)))
       .filter((r) => !query || r.name.toLowerCase().includes(query) ||
         r.ingredients.some((i) => i.toLowerCase().includes(query)))
@@ -552,13 +580,16 @@
         el('button', { type: 'button', class: 'btn btn-icon', title: 'Edit recipe', 'aria-label': `Edit ${recipe.name}`, onclick: () => openRecipeDialog(recipe) }, '✎'),
       ),
       el('div', { class: 'recipe-meta' },
+        recipe.premade ? el('span', { class: 'badge premade-badge' }, '📦 Ready-made') : null,
         kindOf(recipe) !== 'meal' ? el('span', { class: 'badge kind-badge' }, `${KIND_INFO[kindOf(recipe)].icon} ${KIND_INFO[kindOf(recipe)].label}`) : null,
-        el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
+        recipe.premade ? null : el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
         recipe.time ? el('span', { class: 'badge' }, `⏱ ${timeText(recipe.time)}`) : null,
-        stock.total
-          ? el('span', { class: `badge ${allIn ? 'have-all' : ''}` },
-              allIn ? 'You have everything' : `You have ${stock.have} of ${stock.total} ingredients`)
-          : el('span', { class: 'badge' }, 'No ingredients added yet'),
+        recipe.premade
+          ? el('span', { class: `badge ${allIn ? 'have-all' : ''}` }, allIn ? 'In stock' : 'Not in stock')
+          : stock.total
+            ? el('span', { class: `badge ${allIn ? 'have-all' : ''}` },
+                allIn ? 'You have everything' : `You have ${stock.have} of ${stock.total} ingredients`)
+            : el('span', { class: 'badge' }, 'No ingredients added yet'),
       ),
       tagsOf(recipe).length
         ? el('div', { class: 'cat-chips' },
@@ -568,19 +599,35 @@
       recipe.source && sourceLabel(recipe.source)
         ? el('a', { class: 'source-link', href: recipe.source, target: '_blank', rel: 'noopener' }, `Open on ${sourceLabel(recipe.source)} ↗`)
         : null,
-      el('details', {},
-        el('summary', {}, recipe.method ? 'Ingredients and method' : 'Ingredients'),
-        el('h4', {}, 'Ingredients'),
-        ingredients,
-        recipe.method ? [el('h4', {}, 'Method'), el('p', { class: 'method' }, recipe.method)] : null,
-      ),
+      recipe.premade
+        ? (recipe.method ? el('details', {}, el('summary', {}, 'How to cook it'), el('p', { class: 'method' }, recipe.method)) : null)
+        : el('details', {},
+            el('summary', {}, recipe.method ? 'Ingredients and method' : 'Ingredients'),
+            el('h4', {}, 'Ingredients'),
+            ingredients,
+            recipe.method ? [el('h4', {}, 'Method'), el('p', { class: 'method' }, recipe.method)] : null,
+          ),
     );
   }
 
   const recipeDialog = $('#recipe-dialog');
 
-  function openRecipeDialog(recipe, shared) {
-    $('#recipe-dialog-title').textContent = recipe ? 'Edit recipe' : 'Add recipe';
+  let premadeMode = false;
+  let courseChosen = false;
+
+  function openRecipeDialog(recipe, shared, asPremade = false) {
+    premadeMode = recipe ? !!recipe.premade : asPremade;
+    courseChosen = !!recipe;
+    recipeDialog.classList.toggle('premade', premadeMode);
+    $('#recipe-dialog-title').textContent = premadeMode
+      ? (recipe ? 'Edit ready-made food' : 'Add ready-made food')
+      : (recipe ? 'Edit recipe' : 'Add recipe');
+    $('#recipe-name-label').textContent = premadeMode ? 'Name' : 'Recipe name';
+    $('#recipe-name').placeholder = premadeMode ? 'e.g. Oven chips' : 'e.g. Chicken stir fry';
+    if (premadeMode) $('#recipe-name').setAttribute('list', 'premade-options'); else $('#recipe-name').removeAttribute('list');
+    $('#recipe-time-label').textContent = premadeMode ? 'Cooking time (minutes)' : 'Total time (minutes)';
+    $('#recipe-method-label').textContent = premadeMode ? 'How to cook it' : 'Method';
+    $('#recipe-method').placeholder = premadeMode ? 'e.g. Oven, 200°C, 20–25 minutes, turning halfway' : '1. Slice the chicken…';
     $('#recipe-id').value = recipe?.id ?? '';
     $('#recipe-source').value = recipe?.source ?? shared?.url ?? '';
     $('#recipe-paste-text').value = shared?.text ?? '';
@@ -588,7 +635,7 @@
     setClaudeStatus('');
     $('#recipe-name').value = recipe?.name ?? shared?.name ?? '';
     $('#recipe-level').value = recipe?.difficulty ?? 'easy';
-    $('#recipe-course').value = recipe ? kindOf(recipe) : 'meal';
+    $('#recipe-course').value = recipe ? kindOf(recipe) : premadeMode ? 'side' : 'meal';
     pendingTags = new Set(recipe ? tagsOf(recipe) : []);
     $('#cat-custom').value = '';
     $('#cat-picker').open = false;
@@ -607,6 +654,7 @@
     const time = parseInt($('#recipe-time').value, 10);
     const fields = {
       name: $('#recipe-name').value.trim(),
+      premade: premadeMode,
       source: firstUrl($('#recipe-source').value) || null,
       difficulty: $('#recipe-level').value,
       course: $('#recipe-course').value,
@@ -616,6 +664,12 @@
       method: $('#recipe-method').value.trim(),
     };
     if (!fields.name) return;
+    if (premadeMode) {
+      // Its one "ingredient" is itself, so it shows as in stock or goes on the shopping list.
+      fields.ingredients = [fields.name];
+      fields.difficulty = 'easy';
+      fields.source = null;
+    }
     const existing = id && data.recipes.find((r) => r.id === id);
     if (existing) Object.assign(existing, fields);
     else data.recipes.push({ id: uid(), addedBy: myId(), ...fields });
@@ -748,6 +802,19 @@ Method:
   $('#recipe-kind').append(...KINDS.map(([id, icon, , plural]) => el('option', { value: id }, `${icon} ${plural}`)));
   $('#recipe-kind').addEventListener('change', renderRecipes);
   $('#recipe-course').replaceChildren(...KINDS.map(([id, icon, label]) => el('option', { value: id }, `${icon} ${label}`)));
+  $('#recipe-course').addEventListener('change', () => { courseChosen = true; });
+  $('#premade-options').replaceChildren(...PREMADE_SUGGESTIONS.map(([name]) => el('option', { value: name })));
+  // For ready-made food, pick a sensible kind and cooking time from the name as it's typed.
+  $('#recipe-name').addEventListener('input', () => {
+    if (!premadeMode) return;
+    const name = $('#recipe-name').value.trim();
+    if (!courseChosen) $('#recipe-course').value = premadeKind(name);
+    const known = PREMADE_SUGGESTIONS.find(([n]) => n.toLowerCase() === name.toLowerCase());
+    if (known && !$('#recipe-time').value && known[1]) $('#recipe-time').value = known[1];
+  });
+  $('#add-premade-btn').addEventListener('click', () => openRecipeDialog(null, null, true));
+  $('#recipe-kind').append(el('option', { value: '@premade' }, '📦 Ready-made'));
+  $('#finder-kind').append(el('option', { value: '@premade' }, '📦 Ready-made'));
 
   // Category picker in the recipe form.
   let pendingTags = new Set();
@@ -909,13 +976,15 @@ Method:
 
   // Picker of saved recipes, grouped by kind, leaving out what's already in the slot.
   function dishPicker(id, chosenIds, onPick) {
-    const groups = KINDS.map(([kind, icon, , plural]) => {
-      const options = data.recipes.filter((r) => kindOf(r) === kind && !chosenIds.includes(r.id))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      return options.length
-        ? el('optgroup', { label: `${icon} ${plural}` }, options.map((r) => el('option', { value: r.id }, r.name)))
-        : null;
-    }).filter(Boolean);
+    const group = (label, list) => (list.length
+      ? el('optgroup', { label }, list.sort((a, b) => a.name.localeCompare(b.name)).map((r) => el('option', { value: r.id }, r.name)))
+      : null);
+    const available = data.recipes.filter((r) => !chosenIds.includes(r.id));
+    // Ready-made food gets its own group, after the mains, ready to go alongside them.
+    const groups = KINDS.flatMap(([kind, icon, , plural]) => [
+      group(`${icon} ${plural}`, available.filter((r) => !r.premade && kindOf(r) === kind)),
+      kind === 'main' ? group('📦 Ready-made', available.filter((r) => r.premade)) : null,
+    ]).filter(Boolean);
     const placeholder = !data.recipes.length ? 'No recipes saved'
       : chosenIds.length ? '+ Add another part…' : 'Choose a meal…';
     const select = el('select', { id, class: `dish-picker ${chosenIds.length ? 'more' : 'empty'}`, onchange: (e) => onPick(e.target.value) },
@@ -937,7 +1006,7 @@ Method:
       for (const tag of finder.tags) {
         if (tag === '@season' ? !tagsOf(r).includes(season) : !tagsOf(r).includes(tag)) return false;
       }
-      if (finder.kind && kindOf(r) !== finder.kind) return false;
+      if (finder.kind && (finder.kind === '@premade' ? !r.premade : kindOf(r) !== finder.kind)) return false;
       if (finder.stock) {
         const stock = recipeStock(r);
         if (!stock.total || stock.have * 2 < stock.total) return false;
@@ -973,7 +1042,7 @@ Method:
         el('button', { type: 'button', class: 'finder-name', onclick: () => openRecipeView(r) },
           el('span', { class: 'dash-dish-name' }, kind !== 'meal' ? `${KIND_INFO[kind].icon} ` : '', r.name),
           el('span', { class: 'dash-dish-meta' },
-            [r.time ? `⏱ ${timeText(r.time)}` : null, stock.total ? `${stock.have}/${stock.total} in stock` : null,
+            [r.time ? `⏱ ${timeText(r.time)}` : null, stock.total ? stockLabel(r, stock) : null,
               tagsOf(r).slice(0, 3).map(catLabel).join(' ')].filter(Boolean).join(' · '))),
         el('button', { type: 'button', class: 'btn btn-small', onclick: () => openAddToPlan(r) }, '+ Add'));
     }));
@@ -1138,7 +1207,7 @@ Method:
     const stock = recipeStock(recipe);
     $('#wheel-result-name').textContent = recipe.name;
     $('#wheel-result-meta').textContent = [recipe.time ? `⏱ ${timeText(recipe.time)}` : null,
-      DIFFICULTY[recipe.difficulty], stock.total ? `${stock.have}/${stock.total} ingredients in stock` : null].filter(Boolean).join(' · ');
+      recipe.premade ? '📦 Ready-made' : DIFFICULTY[recipe.difficulty], stock.total ? stockLabel(recipe, stock, true) : null].filter(Boolean).join(' · ');
     $('#wheel-result').hidden = false;
   }
 
@@ -1172,10 +1241,11 @@ Method:
             el('div', { class: 'dish-main' },
               el('span', { class: 'dish-name' }, recipe.name),
               el('div', { class: 'slot-meta' },
+                recipe.premade ? el('span', { class: 'badge premade-badge' }, '📦 Ready-made') : null,
                 kind !== 'meal' ? el('span', { class: 'badge kind-badge' }, `${KIND_INFO[kind].icon} ${KIND_INFO[kind].label}`) : null,
-                el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
+                recipe.premade ? null : el('span', { class: `badge ${recipe.difficulty}` }, DIFFICULTY[recipe.difficulty]),
                 recipe.time ? el('span', { class: 'badge' }, `⏱ ${timeText(recipe.time)}`) : null,
-                stock.total ? el('span', { class: `badge ${stock.have === stock.total ? 'have-all' : ''}` }, `${stock.have}/${stock.total} in stock`) : null)),
+                stock.total ? el('span', { class: `badge ${stock.have === stock.total ? 'have-all' : ''}` }, stockLabel(recipe, stock)) : null)),
             el('button', { type: 'button', class: 'btn btn-icon dish-remove', title: `Remove ${recipe.name}`, 'aria-label': `Remove ${recipe.name} from ${label.toLowerCase()}`, onclick: () => removeDish(date, meal, rid) }, '×'));
         });
         return el('div', { class: 'slot' },
@@ -1369,7 +1439,8 @@ Method:
         need,
         key: entry.key,
         type: entry.type,
-        recipes: [...entry.uses].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)),
+        recipes: [...entry.uses].filter(([name]) => name.toLowerCase() !== entry.name.toLowerCase())
+          .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)),
       });
     }
     const order = FOOD_TYPES.map(([id]) => id);
@@ -1456,7 +1527,7 @@ Method:
                 el('span', { class: 'dash-dish-meta' },
                   r.time ? `⏱ ${timeText(r.time)}` : '',
                   stock.total ? el('span', { class: stock.have === stock.total ? 'ok-text' : '' },
-                    `${r.time ? ' · ' : ''}${stock.have === stock.total ? 'All in stock' : `${stock.have}/${stock.total} in stock`}`) : null)));
+                    `${r.time ? ' · ' : ''}${stock.have === stock.total ? (r.premade ? 'In stock' : 'All in stock') : stockLabel(r, stock)}`) : null)));
           }))
         : el('button', { type: 'button', class: 'btn btn-small', onclick: () => { weekStart = mondayOf(date); showTab('plan'); renderPlan(); } }, 'Plan it'));
   }
@@ -1868,7 +1939,7 @@ Method:
       const line = choice.dataset.line;
       if (choice.value === 'shop') {
         const p = parseIngredient(line);
-        const entry = { line: p.amount === null ? p.name.charAt(0).toUpperCase() + p.name.slice(1) : totalText(p.family, p.amount, p.name), key: p.key, type: guessType(line), recipes: [missingRecipe.name] };
+        const entry = { line: p.amount === null ? p.name.charAt(0).toUpperCase() + p.name.slice(1) : totalText(p.family, p.amount, p.name), key: p.key, type: guessType(line), recipes: missingRecipe.premade ? [] : [missingRecipe.name] };
         if (addNeeded(entry) !== 'covered') shop++;
       }
       if (choice.value === 'have') { foodFromText(line, rowEl.querySelector('.missing-place').value); have++; }
@@ -1901,7 +1972,7 @@ Method:
   // The recipe itself travels in the link (#recipe=...), compressed where the browser can, so
   // anyone can open it: no account, household or server needed.
 
-  const SHARE_FIELDS = ['name', 'course', 'difficulty', 'time', 'ingredients', 'method', 'source', 'tags'];
+  const SHARE_FIELDS = ['name', 'premade', 'course', 'difficulty', 'time', 'ingredients', 'method', 'source', 'tags'];
   const QR_MAX = 2000;   // longer links make QR codes too dense to scan reliably
 
   function toBase64Url(bytes) {
@@ -1946,6 +2017,7 @@ Method:
     // Only keep the fields a recipe has, in the shapes the app expects.
     const recipe = {
       name: raw.name.trim().slice(0, 120),
+      premade: raw.premade === true,
       course: KIND_INFO[raw.course] ? raw.course : 'meal',
       difficulty: DIFFICULTY[raw.difficulty] ? raw.difficulty : 'easy',
       time: Number.isFinite(raw.time) && raw.time > 0 ? Math.round(raw.time) : null,

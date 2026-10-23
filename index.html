@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=26">
+  <link rel="stylesheet" href="styles.css?v=28">
 </head>
 <body>
   <header class="site-header">
@@ -145,6 +145,7 @@
         </div>
         <div class="toolbar-group">
           <button type="button" id="auto-cat-btn" class="btn">✨ Auto-categorise</button>
+          <button type="button" id="add-premade-btn" class="btn">📦 + Add ready-made</button>
           <button type="button" id="add-recipe-btn" class="btn btn-primary">+ Add recipe</button>
         </div>
       </section>
@@ -290,13 +291,13 @@
     <form id="recipe-form" method="dialog">
       <h2 id="recipe-dialog-title">Add recipe</h2>
       <input type="hidden" id="recipe-id">
-      <label>Link <span class="muted">(Pinterest, TikTok or a website – optional)</span>
+      <label class="not-premade">Link <span class="muted">(Pinterest, TikTok or a website – optional)</span>
         <span class="input-with-btn">
           <input type="url" id="recipe-source" inputmode="url" placeholder="Paste a link">
           <button type="button" class="btn" id="recipe-paste-link">Paste</button>
         </span>
       </label>
-      <div class="ai-row">
+      <div class="ai-row not-premade">
         <div class="ai-buttons">
           <button type="button" class="btn btn-ai" id="recipe-claude">✨ Copy for Claude</button>
           <a class="btn btn-small" href="https://claude.ai/new" target="_blank" rel="noopener">Open Claude ↗</a>
@@ -304,15 +305,17 @@
         <p class="muted ai-hint">Ask Claude to write the recipe for free: copy, paste into the Claude app, then paste the reply back below.</p>
         <p id="recipe-claude-status" class="ai-status" role="status" hidden></p>
       </div>
-      <details class="import-text" id="recipe-import">
+      <details class="import-text not-premade" id="recipe-import">
         <summary>Paste the recipe text to fill this in</summary>
         <p class="muted">Paste Claude’s reply, a TikTok caption or a recipe from a website here, and the form will be filled in for you.</p>
         <textarea id="recipe-paste-text" rows="5" aria-label="Recipe text to import" placeholder="Ingredients&#10;- 2 chicken breasts&#10;- 1 tbsp honey&#10;Method&#10;1. Mix the sauce…"></textarea>
         <button type="button" class="btn btn-small" id="recipe-fill">Fill in from text</button>
       </details>
-      <label>Recipe name
+      <p class="muted premade-only premade-intro">Ready-made food is something you buy and just cook or serve, like oven chips or garlic bread. It's added as part of a meal by default.</p>
+      <label><span id="recipe-name-label">Recipe name</span>
         <input type="text" id="recipe-name" required placeholder="e.g. Chicken stir fry">
       </label>
+      <datalist id="premade-options"></datalist>
       <label>What is it?
         <select id="recipe-course"></select>
         <span class="muted field-hint">Choose a part (like a side or a sauce) to add it alongside other recipes in the meal plan.</span>
@@ -331,21 +334,21 @@
         </span>
       </details>
       <div class="row">
-        <label>Difficulty
+        <label class="not-premade">Difficulty
           <select id="recipe-level">
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
             <option value="hard">Hard</option>
           </select>
         </label>
-        <label>Total time (minutes)
-          <input type="number" id="recipe-time" min="0" step="5" placeholder="e.g. 30">
+        <label><span id="recipe-time-label">Total time (minutes)</span>
+          <input type="number" id="recipe-time" min="0" step="1" inputmode="numeric" placeholder="e.g. 30">
         </label>
       </div>
-      <label>Ingredients <span class="muted">(one per line)</span>
+      <label class="not-premade">Ingredients <span class="muted">(one per line)</span>
         <textarea id="recipe-ingredients" rows="6" placeholder="4 chicken thighs&#10;1 pepper&#10;200g noodles&#10;Soy sauce"></textarea>
       </label>
-      <label>Method <span class="muted">(optional)</span>
+      <label><span id="recipe-method-label">Method</span> <span class="muted">(optional)</span>
         <textarea id="recipe-method" rows="6" placeholder="1. Slice the chicken…"></textarea>
       </label>
       <div class="dialog-actions">
@@ -640,8 +643,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=26"></script>
-  <script src="firebase-config.js?v=26"></script>
-  <script src="app.js?v=26"></script>
+  <script src="avatars.js?v=28"></script>
+  <script src="firebase-config.js?v=28"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>

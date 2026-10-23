@@ -113,7 +113,7 @@ body {
   margin-bottom: 16px;
 }
 .toolbar-group { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 auto; }
-.toolbar-group:last-child { justify-content: flex-end; flex: 0 0 auto; }
+.toolbar-group:last-child { justify-content: flex-end; flex: 0 1 auto; max-width: 100%; }
 .toolbar input[type="search"] { flex: 1 1 180px; min-width: 0; }
 
 input, select, textarea {
@@ -775,3 +775,9 @@ dialog.drawer[open] { display: flex; animation: drawer-in 0.22s ease-out; }
 .fill-preview .for { color: var(--muted); font-size: 0.85rem; }
 #fill-add { align-self: flex-start; }
 #fill-add:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Ready-made food */
+#recipe-dialog.premade .not-premade { display: none !important; }
+#recipe-dialog:not(.premade) .premade-only { display: none !important; }
+.premade-intro { margin: -4px 0 12px; font-size: 0.88rem; }
+.premade-badge { background: var(--low-bg); color: var(--low); border-color: transparent; }
