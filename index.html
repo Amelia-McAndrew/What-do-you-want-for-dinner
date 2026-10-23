@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
   <header class="site-header">
@@ -145,9 +145,11 @@
           </select>
         </div>
         <div class="toolbar-group">
+          <button type="button" id="auto-cat-btn" class="btn">✨ Auto-categorise</button>
           <button type="button" id="add-recipe-btn" class="btn btn-primary">+ Add recipe</button>
         </div>
       </section>
+      <p id="auto-cat-status" class="ai-status" role="status" hidden></p>
       <section id="recipes" class="recipes"></section>
       <p id="recipes-empty" class="muted center" hidden>No recipes yet. Add your favourite dinners and see which ones you can make with what you have.</p>
     </div>
@@ -307,6 +309,10 @@
       </label>
       <details class="cat-picker" id="cat-picker">
         <summary>Categories <span class="muted" id="cat-summary">None yet</span></summary>
+        <div class="cat-suggest-row">
+          <button type="button" class="btn btn-small btn-ai" id="cat-suggest">✨ Suggest categories</button>
+        </div>
+        <p id="cat-suggest-status" class="ai-status" role="status" hidden></p>
         <div id="cat-groups"></div>
         <p class="picker-group">Add your own</p>
         <span class="input-with-btn">
@@ -462,8 +468,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=19"></script>
-  <script src="firebase-config.js?v=19"></script>
-  <script src="app.js?v=19"></script>
+  <script src="avatars.js?v=20"></script>
+  <script src="firebase-config.js?v=20"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

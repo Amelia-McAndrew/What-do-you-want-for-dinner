@@ -60,6 +60,57 @@
     return t.slice(0, 30);
   }
 
+  // Suggest categories from a recipe's name, ingredients, method, time and kind. Rules, not AI,
+  // so it's free, instant and works offline; people can always change what it picks.
+  const CATEGORY_RULES = [
+    ['asian', /\b(soy|gochujang|miso|teriyaki|katsu|ramen|noodles?|stir.?fry|sesame oil|fish sauce|sriracha|kimchi|pak choi|bok choy|rice vinegar|hoisin|satay|thai|chinese|japanese|korean|vietnamese|pho|sushi|dumplings?|gyoza|wok|lemongrass|green curry|red curry|curry paste|chow mein|fried rice|bao|bibimbap|bulgogi|sweet and sour|five spice)\b/],
+    ['indian', /\b(tikka|masala|korma|dh?al|biryani|naan|paneer|garam masala|bhaji|samosa|tandoori|chana|saag|vindaloo|madras|jalfrezi|rogan josh|balti|pilau|chapati|raita)\b/],
+    ['italian', /\b(pasta|spaghetti|penne|fusilli|linguine|tagliatelle|lasagne|risotto|pizza|parmesan|mozzarella|pesto|gnocchi|bolognese|carbonara|ciabatta|focaccia|arrabbiata|puttanesca|tiramisu|bruschetta|prosciutto|orzo)\b/],
+    ['mexican', /\b(tacos?|tortillas?|burritos?|fajitas?|enchiladas?|quesadillas?|salsa|guacamole|chipotle|jalapeños?|jalapenos?|nachos|chilli con carne|refried|mexican)\b/],
+    ['british', /\b(roast|shepherd'?s pie|cottage pie|toad in the hole|yorkshire|bangers|mash|fish and chips|crumble|scones?|stuffing|gravy|full english|jacket potato|pork rolls?|hotpot|pasty|scotch egg|bubble and squeak|trifle|sticky toffee|pie and)\b/],
+    ['mediterranean', /\b(feta|halloumi|olives|greek|tzatziki|souvlaki|moussaka|paella|chorizo|gazpacho|orzo|sun.?dried)\b/],
+    ['american', /\b(burgers?|mac and cheese|mac ?n ?cheese|pancakes|hot ?dogs?|buffalo|pulled pork|brownies?|cornbread|cajun|sloppy joe|ribs|coleslaw|meatloaf)\b/],
+    ['middle-eastern', /\b(hummus|falafel|shawarma|tahini|za'?atar|sumac|harissa|tagine|pittas?|kebabs?|shakshuka|freekeh|baba ganoush|kofta)\b/],
+    ['french', /\b(croissants?|ratatouille|coq au vin|bourguignon|quiche|cr[eê]pes?|gratin|dauphinoise|brioche|b[eé]arnaise|cassoulet|tartiflette|crème brûlée|creme brulee|french)\b/],
+    ['winter', /\b(stew|casserole|soup|hotpot|crumble|mulled|dumplings|braised|chilli con carne|root veg|swede|parsnips?|slow.?cook)/],
+    ['autumn', /\b(pumpkin|squash|apples?(?! sauce)|mushrooms?|parsnips?|blackberr(y|ies)|sweet potato(es)?|chestnuts?|plums?|pears?|cinnamon)\b/],
+    ['summer', /\b(salad|bbq|barbecue|strawberr(y|ies)|grilled|ice cream|gazpacho|courgettes?|sweetcorn|corn on the cob|watermelon|peach(es)?|tomato salad|kebabs?|halloumi)\b/],
+    ['spring', /\b(asparagus|peas|lamb|wild garlic|rhubarb|new potato(es)?|spring onions?|radish(es)?|broad beans|watercress)\b/],
+    ['christmas', /\b(turkey|sprouts|cranberr(y|ies)|mince pies?|gingerbread|christmas|pigs in blankets|yule|mulled wine|bread sauce|stollen)\b/],
+    ['healthy', /\b(salad|healthy|light|low.?cal(orie)?|high.?protein|protein|poke|buddha bowl|steamed|quinoa|lentils?|chickpeas?|veggie bowl)\b/],
+    ['slow-cooker', /\b(slow.?cook(er|ed)?|crock.?pot)\b/],
+    ['batch', /\b(batch|freezes? well|meal prep|freeze (it|leftovers|portions))\b/],
+    ['bbq', /\b(bbq|barbecue|chargrill(ed)?)\b/],
+    ['roast', /\broast (chicken|beef|pork|lamb|turkey|dinner)\b|\bsunday roast\b|\byorkshire pudding/],
+    ['fakeaway', /\b(katsu|sweet and sour|kebabs?|fakeaway|takeaway|crispy chilli|salt and pepper|chow mein|fried rice|doner|pizza|tikka masala|korma|bhaji|burgers?|nuggets|wings)\b/],
+    ['comfort', /\b(pies?|mac and cheese|stew|lasagne|mash|crumble|casserole|hotpot|pasta bake|cottage|shepherd'?s|toad in the hole|dumplings|sticky toffee|risotto|cheesy)\b/],
+    ['kids', /\b(fish fingers|nuggets|pizza|pasta bake|mac and cheese|sausages?|hot ?dogs?|fajitas|wraps?|pancakes|spaghetti bolognese)\b/],
+  ];
+  const MEAT_OR_FISH = /\b(chicken|beef|pork|lamb|turkey|duck|mince|steak|bacon|ham|sausages?|chorizo|salami|pepperoni|gammon|fish|salmon|cod|haddock|tuna|prawns?|shrimp|mackerel|sardines|anchov(y|ies)|seafood|mussels|squid|meat|veal|venison|thighs?|breasts?|wings?|drumsticks?|stock cubes?|chicken stock|beef stock|gelatine|fish sauce|worcestershire)\b/;
+  const ANIMAL_PRODUCTS = /\b(milk|cheese|cheddar|mozzarella|parmesan|feta|halloumi|butter|cream|yogh?urt|eggs?|honey|mayo(nnaise)?|custard|ghee|paneer|creme fraiche|crème fraîche|mascarpone|ricotta)\b/;
+  const PLANT_MILK = /\b(oat|soya?|almond|coconut|plant|vegan) (milk|cream|yogh?urt|butter|cheese)\b/g;
+
+  function suggestCategories(recipe) {
+    const ingredients = (recipe.ingredients || []).join('\n').toLowerCase();
+    const text = `${recipe.name || ''}\n${ingredients}\n${recipe.method || ''}`.toLowerCase();
+    const found = new Set();
+    for (const [id, pattern] of CATEGORY_RULES) if (pattern.test(text)) found.add(id);
+    // "Curry" on its own is usually Indian, unless it's clearly a katsu or Thai curry.
+    if (/\bcurry\b/.test(text) && !found.has('asian')) found.add('indian');
+    if (recipe.time && recipe.time <= 30) found.add('quick');
+    if (recipe.time && recipe.time >= 240 && /slow/.test(text)) found.add('slow-cooker');
+    // Diet only when there's an ingredient list to judge by.
+    if (ingredients.trim() && !MEAT_OR_FISH.test(`${recipe.name || ''}\n${ingredients}`.toLowerCase())) {
+      found.add('vegetarian');
+      if (!ANIMAL_PRODUCTS.test(ingredients.replace(PLANT_MILK, ''))) found.add('vegan');
+    }
+    // Dessert and drink recipes aren't fakeaways or roasts.
+    if (['dessert', 'drink'].includes(recipe.course)) { found.delete('fakeaway'); found.delete('roast'); found.delete('kids'); }
+    // Keep the list in the same order as the picker.
+    const order = CATEGORY_GROUPS.flatMap(([, cats]) => cats.map(([id]) => id));
+    return order.filter((id) => found.has(id));
+  }
+
   // UK seasons by month.
   function currentSeason(date = new Date()) {
     const m = date.getMonth();
@@ -537,6 +588,7 @@
     pendingTags = new Set(recipe ? tagsOf(recipe) : []);
     $('#cat-custom').value = '';
     $('#cat-picker').open = false;
+    $('#cat-suggest-status').hidden = true;
     renderCategoryPicker();
     $('#recipe-time').value = recipe?.time ?? '';
     $('#recipe-ingredients').value = recipe ? recipe.ingredients.join('\n') : '';
@@ -712,6 +764,43 @@ Method:
     const chosen = [...pendingTags];
     $('#cat-summary').textContent = chosen.length ? chosen.map(catLabel).join('  ') : 'None yet';
   }
+
+  // "Suggest" in the recipe form: add what the rules find to what's already picked.
+  $('#cat-suggest').addEventListener('click', () => {
+    const time = parseInt($('#recipe-time').value, 10);
+    const found = suggestCategories({
+      name: $('#recipe-name').value,
+      ingredients: $('#recipe-ingredients').value.split('\n'),
+      method: $('#recipe-method').value,
+      time: time > 0 ? time : null,
+      course: $('#recipe-course').value,
+    });
+    const added = found.filter((tag) => !pendingTags.has(tag));
+    added.forEach((tag) => pendingTags.add(tag));
+    $('#cat-picker').open = true;
+    renderCategoryPicker();
+    $('#cat-suggest-status').textContent = added.length
+      ? `Added ${added.map(catLabel).join(', ')}. Tap any you don’t want to remove it.`
+      : found.length ? 'Those all match what’s already picked.' : 'Couldn’t suggest any. Add some ingredients first, or pick them yourself.';
+    $('#cat-suggest-status').hidden = false;
+  });
+
+  // "Auto-categorise" on the Recipes tab: only recipes with no categories yet.
+  $('#auto-cat-btn').addEventListener('click', () => {
+    const todo = data.recipes.filter((r) => !tagsOf(r).length);
+    const say = (text) => { $('#auto-cat-status').textContent = text; $('#auto-cat-status').hidden = false; };
+    if (!todo.length) { say('Every recipe already has categories. To change one, tap ✎ on it.'); return; }
+    let changed = 0;
+    for (const recipe of todo) {
+      const tags = suggestCategories(recipe);
+      if (tags.length) { recipe.tags = tags; changed++; }
+    }
+    if (!changed) { say(`Couldn’t suggest categories for the ${todo.length === 1 ? 'recipe' : `${todo.length} recipes`} without any. Add ingredients, or pick them by tapping ✎.`); return; }
+    save();
+    renderRecipes();
+    const skipped = todo.length - changed;
+    say(`Added categories to ${changed} recipe${changed === 1 ? '' : 's'}${skipped ? ` (${skipped} had nothing to go on)` : ''}. Recipes that already had categories weren’t changed.`);
+  });
 
   function addCustomCategory() {
     const tag = categoryFor($('#cat-custom').value);

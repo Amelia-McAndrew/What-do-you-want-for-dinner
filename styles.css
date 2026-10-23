@@ -604,3 +604,8 @@ dialog { max-height: calc(100dvh - 32px); }
 .cat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .cat-chip { font-size: 0.78rem; padding: 1px 8px; border-radius: 999px; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
 .cat-chip.in-season { background: var(--warn-bg); color: var(--warn); border-color: transparent; font-weight: 600; }
+
+/* Auto-categorise */
+.cat-suggest-row { margin: 6px 0; }
+#cat-suggest-status { margin: 0 0 6px; }
+#auto-cat-status { margin: 0 0 16px; }
