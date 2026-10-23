@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=28">
+  <link rel="stylesheet" href="styles.css?v=29">
 </head>
 <body>
   <header class="site-header">
@@ -468,9 +468,16 @@
         <div class="home-actions">
           <button type="button" class="btn btn-primary" id="home-invite">Send invite link</button>
           <button type="button" class="btn" id="home-copy">Copy code</button>
-          <span class="spacer"></span>
-          <button type="button" class="btn btn-small btn-danger" id="home-leave">Leave household</button>
+          <button type="button" class="btn" id="home-newcode" hidden>New code</button>
         </div>
+        <p class="muted" id="home-owner" hidden></p>
+        <button type="button" class="btn btn-small" id="home-claim" hidden>Make me the owner</button>
+        <p class="muted" id="home-rules-note" hidden>Owner controls (changing the code and removing phones) need the updated Firebase rules.</p>
+        <div id="home-devices-wrap" hidden>
+          <h3 class="sub-head">Phones in this household</h3>
+          <ul id="home-devices" class="devices"></ul>
+        </div>
+        <button type="button" class="btn btn-small btn-danger" id="home-leave">Leave household</button>
       </div>
       <div id="home-local">
         <p>Your lists are only on this phone at the moment. Create a household to share them with the people you live with, or join one you've been invited to.</p>
@@ -643,8 +650,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=28"></script>
-  <script src="firebase-config.js?v=28"></script>
-  <script src="app.js?v=28"></script>
+  <script src="avatars.js?v=29"></script>
+  <script src="firebase-config.js?v=29"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

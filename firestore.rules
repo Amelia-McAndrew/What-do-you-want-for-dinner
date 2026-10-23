@@ -2,18 +2,66 @@ rules_version = '2';
 
 // Security rules for household sharing. Paste these into
 // Firebase console → Firestore Database → Rules, then Publish.
+//
+// Each phone signs in anonymously. A household has an owner and a join code; only phones
+// registered in the household (households/{id}/devices/{phone}) can see or change its lists.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // A household can be opened or created by its code, but households can't be listed,
-    // so the only way in is knowing the code.
-    match /households/{code} {
-      allow get: if request.auth != null;
-      allow create: if request.auth != null && code.size() >= 16;
+    function signedIn() {
+      return request.auth != null;
+    }
+    function householdPath(hid) {
+      return /databases/$(database)/documents/households/$(hid);
+    }
+    function isMember(hid) {
+      return exists(/databases/$(database)/documents/households/$(hid)/devices/$(request.auth.uid));
+    }
+    function isOwner(hid) {
+      return get(householdPath(hid)).data.get('owner', '') == request.auth.uid;
+    }
 
+    // Join codes point to a household. Anyone signed in can look up an exact code (codes
+    // can't be listed); only the household's owner can create or retire them.
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() && code.size() >= 16
+        && existsAfter(householdPath(request.resource.data.hid))
+        && getAfter(householdPath(request.resource.data.hid)).data.get('owner', '') == request.auth.uid
+        && getAfter(householdPath(request.resource.data.hid)).data.get('code', '') == code;
+      allow delete: if signedIn() && isOwner(resource.data.hid);
+    }
+
+    match /households/{hid} {
+      // Only phones in the household can see it (including its code and owner).
+      allow get: if signedIn() && isMember(hid);
+      // A new household: whoever creates it is the owner.
+      allow create: if signedIn() && hid.size() >= 16
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.code is string && request.resource.data.code.size() >= 16;
+      // The owner can change the code or hand over ownership. In a household made before
+      // owners existed, any phone in it can claim ownership once.
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['owner', 'code'])
+        && (isOwner(hid)
+          || (isMember(hid) && resource.data.get('owner', '') == '' && request.resource.data.owner == request.auth.uid));
+
+      // One record per phone. A phone can add itself only with the household's current code;
+      // the owner can remove any phone, and a phone can remove itself.
+      match /devices/{uid} {
+        allow read: if signedIn() && isMember(hid);
+        allow create: if signedIn() && uid == request.auth.uid
+          && existsAfter(householdPath(hid))
+          && request.resource.data.code == getAfter(householdPath(hid)).data.get('code', hid);
+        allow update: if signedIn() && uid == request.auth.uid && isMember(hid)
+          && request.resource.data.code == resource.data.code;
+        allow delete: if signedIn() && (uid == request.auth.uid || isOwner(hid));
+      }
+
+      // The household's lists.
       match /{collection}/{docId} {
-        allow read, write: if request.auth != null
+        allow read, write: if signedIn()
           && collection in ['places', 'items', 'recipes', 'plan', 'members', 'shopping']
-          && exists(/databases/$(database)/documents/households/$(code));
+          && isMember(hid);
       }
     }
   }

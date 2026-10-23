@@ -2345,6 +2345,7 @@ Method:
       if (id) localStorage.setItem(ME_KEY, id);
       else localStorage.removeItem(ME_KEY);
     } catch (e) { /* storage unavailable */ }
+    syncDeviceProfile();
   }
 
   function initials(name) {
@@ -2401,8 +2402,13 @@ Method:
       el('li', {},
         el('button', { type: 'button', class: `who-person ${m.id === mineId ? 'selected' : ''}`, 'aria-pressed': String(m.id === mineId), onclick: () => { setMe(m.id); render(); whoDialog.close(); } },
           avatar(m, 56), el('span', { class: 'who-name' }, m.name), m.id === mineId ? el('span', { class: 'who-me' }, 'This is you') : null),
-        el('button', { type: 'button', class: 'btn btn-icon who-edit', title: `Edit ${m.name}`, 'aria-label': `Edit ${m.name}`, onclick: () => openProfileForm(m) }, '✎'))));
+        m.id === mineId || canManagePeople()
+          ? el('button', { type: 'button', class: 'btn btn-icon who-edit', title: `Edit ${m.name}`, 'aria-label': `Edit ${m.name}`, onclick: () => openProfileForm(m) }, '✎')
+          : null)));
     $('#who-empty').hidden = data.members.length > 0;
+    // Once a household has an owner, only they add other people; anyone can add themselves.
+    $('#who-add').hidden = !canManagePeople() && !!me();
+    $('#who-add').textContent = canManagePeople() ? '+ Add a person' : '+ Add me';
   }
 
   function openWhoDialog() {
@@ -2446,7 +2452,7 @@ Method:
     $('#profile-dialog-title').textContent = member ? `Edit ${member.name}` : 'Add a person';
     $('#profile-id').value = member?.id ?? '';
     $('#profile-name').value = member?.name ?? '';
-    $('#profile-delete').hidden = !member;
+    $('#profile-delete').hidden = !member || !(canManagePeople() || member.id === myId());
     $('#profile-photo-status').hidden = true;
     // Someone new starts with a random character; they can pick another, a photo or initials.
     pendingPhoto = member || !CHARACTERS.length ? undefined : CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)].url;
@@ -2506,6 +2512,7 @@ Method:
     if (existing) {
       existing.name = name;
       if (pendingPhoto !== undefined) existing.photo = pendingPhoto;
+      if (existing.id === myId()) syncDeviceProfile();
     } else {
       const person = { id: uid(), name, photo: pendingPhoto || null };
       data.members.push(person);
@@ -2564,13 +2571,34 @@ Method:
     'OTTER', 'PEBBLE', 'PINE', 'POPPY', 'QUAIL', 'RAVEN', 'RIVER', 'ROBIN', 'ROWAN', 'SPARROW', 'STONE', 'THISTLE',
     'TIGER', 'TULIP', 'WILLOW', 'WREN', 'BEACON', 'CANDLE', 'HARP', 'LANTERN', 'MARBLE', 'ORBIT', 'QUILL', 'VELVET'];
 
-  let household = null;       // { code } while sharing
+  // While sharing: { id, code }. `id` is where the household lives; `code` is the join code
+  // people type. Households made before codes could change use their first code as the id.
+  let household = null;
   let fb = null;              // { mod, db, auth } once Firebase has loaded
   let unsubscribers = [];
   let ready = new Set();      // collections that have had their first snapshot
   let synced = {};            // collection -> { id: JSON of the last version seen in Firestore }
+  let rulesMode = 'unknown';  // 'new' once this phone is registered; 'old' if the rules predate owners
+  let owner = null;           // the owner phone's sign-in id, if the household has one
+  let devices = [];           // phones in the household: { uid, profileId, name, joined }
+  let needsRegister = false;  // couldn't register (e.g. offline); try again when back online
 
-  try { household = JSON.parse(localStorage.getItem(HOUSEHOLD_KEY) || 'null'); } catch (e) { household = null; }
+  try {
+    household = JSON.parse(localStorage.getItem(HOUSEHOLD_KEY) || 'null');
+    if (household && !household.id) household.id = household.code;
+  } catch (e) { household = null; }
+
+  function saveHousehold() {
+    try {
+      if (household) localStorage.setItem(HOUSEHOLD_KEY, JSON.stringify(household));
+      else localStorage.removeItem(HOUSEHOLD_KEY);
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  const myUid = () => (fb && fb.auth.currentUser ? fb.auth.currentUser.uid : null);
+  const isOwnerHere = () => rulesMode === 'new' && !!owner && owner === myUid();
+  // Owners manage people; before owners existed (or with the older rules) everyone could.
+  const canManagePeople = () => !household || rulesMode !== 'new' || !owner || isOwnerHere();
 
   // Stable JSON so the same object always compares equal, whatever order Firestore returns fields in.
   function stable(value) {
@@ -2632,7 +2660,7 @@ Method:
         const before = { ...(synced[name] || {}) };
         synced[name] = synced[name] || {};
         for (const [op, , id, fields, json] of chunk) {
-          const ref = mod.doc(db, 'households', household.code, name, id);
+          const ref = mod.doc(db, 'households', household.id, name, id);
           if (op === 'set') { batch.set(ref, fields); synced[name][id] = json; }
           else { batch.delete(ref); delete synced[name][id]; }
         }
@@ -2692,8 +2720,22 @@ Method:
   function startListening() {
     const { mod, db } = fb;
     stopListening();
+    if (rulesMode === 'new') {
+      // The household itself (its current code and owner) and the phones in it.
+      unsubscribers.push(mod.onSnapshot(mod.doc(db, 'households', household.id), (snap) => {
+        const d = snap.data();
+        if (!d) return;
+        owner = d.owner || null;
+        if (d.code && d.code !== household.code) { household.code = d.code; saveHousehold(); }
+        render();
+      }, (err) => { if (err.code === 'permission-denied') checkStillMember(); }));
+      unsubscribers.push(mod.onSnapshot(mod.collection(db, 'households', household.id, 'devices'), (snap) => {
+        devices = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+        render();
+      }, () => {}));
+    }
     for (const name of COLLECTIONS) {
-      const ref = mod.collection(db, 'households', household.code, name);
+      const ref = mod.collection(db, 'households', household.id, name);
       unsubscribers.push(mod.onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
         // Profiles were added later, so an empty cached copy may just mean the server hasn't
         // answered (or older rules refuse them). Keep this phone's profiles until it does.
@@ -2707,7 +2749,9 @@ Method:
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
         render();
         setHouseholdChip(snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'waiting for signal' : 'up to date');
-      }, () => {
+      }, (err) => {
+        // Refused: either this phone has been removed, or (older rules) this list isn't shared.
+        if (err.code === 'permission-denied' && rulesMode === 'new') { checkStillMember(); return; }
         // Still let the other lists sync if this one is refused (e.g. older security rules).
         ready.add(name);
         setHouseholdChip(name === 'members' ? 'profiles not shared yet' : name === 'shopping' ? 'shopping list not shared yet' : 'can’t reach the household');
@@ -2715,16 +2759,97 @@ Method:
     }
   }
 
+  // Make sure this phone is registered in the household. Returns 'member' (already was),
+  // 'joined' (just added with the current code), 'old' (the rules predate registration, so
+  // everything works as before) or 'removed' (this phone isn't allowed in any more).
+  async function registerDevice(code) {
+    const { mod, db } = fb;
+    const ref = mod.doc(db, 'households', household.id, 'devices', myUid());
+    const mine = me();
+    const profile = { profileId: mine ? mine.id : null, name: mine ? mine.name : '', lastSeen: new Date().toISOString() };
+    let already = false;
+    try {
+      already = (await mod.getDoc(ref)).exists();
+    } catch (e) {
+      if (e.code !== 'permission-denied') throw e;
+    }
+    if (already) {
+      await mod.setDoc(ref, profile, { merge: true });
+      rulesMode = 'new';
+      return 'member';
+    }
+    try {
+      await mod.setDoc(ref, { ...profile, code: code || household.code, joined: new Date().toISOString() });
+      rulesMode = 'new';
+      return 'joined';
+    } catch (e) {
+      if (e.code !== 'permission-denied') throw e;
+      // Older rules don't have phone records at all, but still let us read the household.
+      try {
+        await mod.getDoc(mod.doc(db, 'households', household.id));
+        rulesMode = 'old';
+        return 'old';
+      } catch (e2) {
+        if (e2.code === 'permission-denied') return 'removed';
+        throw e2;
+      }
+    }
+  }
+
+  // Keep this phone's record showing who it belongs to.
+  function syncDeviceProfile() {
+    if (!household || !fb || rulesMode !== 'new' || !myUid()) return;
+    const mine = me();
+    fb.mod.setDoc(fb.mod.doc(fb.db, 'households', household.id, 'devices', myUid()),
+      { profileId: mine ? mine.id : null, name: mine ? mine.name : '' }, { merge: true }).catch(() => {});
+  }
+
+  let checking = false;
+  async function checkStillMember() {
+    if (checking || !household || !fb) return;
+    checking = true;
+    try {
+      const result = await registerDevice();
+      if (result === 'removed') handleRemoved();
+    } catch (e) {
+      needsRegister = true;
+    } finally {
+      checking = false;
+    }
+  }
+
+  function handleRemoved() {
+    stopListening();
+    household = null;
+    owner = null;
+    devices = [];
+    synced = {};
+    saveHousehold();
+    setHouseholdChip();
+    render();
+    alert('This phone is no longer in the household: it was removed, or the household code changed. Everything is still saved on this phone. To rejoin, ask for the new code.');
+  }
+
   async function connectHousehold() {
     if (!household) return;
     setHouseholdChip('connecting');
     try {
       await loadFirebase();
-      ensureSignedIn().catch(() => setHouseholdChip('waiting for signal'));
-      startListening();
     } catch (e) {
       setHouseholdChip(e.message === 'not-configured' ? 'not set up' : 'waiting for signal');
+      return;
     }
+    try {
+      await ensureSignedIn();
+      const result = await registerDevice();
+      needsRegister = false;
+      if (result === 'removed') { handleRemoved(); return; }
+    } catch (e) {
+      // Offline: carry on from what's saved on the phone, and register when back online.
+      needsRegister = true;
+      setHouseholdChip('waiting for signal');
+    }
+    startListening();
   }
 
   function newCode() {
@@ -2758,9 +2883,28 @@ Method:
     if (!dialog.open) dialog.showModal();
   }
 
-  function rememberHousehold(code) {
-    household = { code };
-    try { localStorage.setItem(HOUSEHOLD_KEY, JSON.stringify(household)); } catch (e) { /* storage unavailable */ }
+  function rememberHousehold(id, code) {
+    household = { id, code };
+    saveHousehold();
+  }
+
+  function randomId() {
+    const bytes = new Uint8Array(15);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  async function unusedCode() {
+    const { mod, db } = fb;
+    for (;;) {
+      const code = newCode();
+      try {
+        if (!(await mod.getDoc(mod.doc(db, 'invites', code))).exists()) return code;
+      } catch (e) {
+        if (e.code === 'permission-denied') return code;   // older rules: no invites to clash with
+        throw e;
+      }
+    }
   }
 
 
@@ -2769,10 +2913,26 @@ Method:
     try {
       await ensureSignedIn();
       const { mod, db } = fb;
-      let code = newCode();
-      while ((await mod.getDoc(mod.doc(db, 'households', code))).exists()) code = newCode();
-      await mod.setDoc(mod.doc(db, 'households', code), { created: mod.serverTimestamp() });
-      rememberHousehold(code);
+      const code = await unusedCode();
+      const id = randomId();
+      const now = new Date().toISOString();
+      const mine = me();
+      const batch = mod.writeBatch(db);
+      batch.set(mod.doc(db, 'households', id), { owner: myUid(), code, created: mod.serverTimestamp() });
+      batch.set(mod.doc(db, 'households', id, 'devices', myUid()), { code, profileId: mine ? mine.id : null, name: mine ? mine.name : '', joined: now, lastSeen: now });
+      batch.set(mod.doc(db, 'invites', code), { hid: id });
+      try {
+        await batch.commit();
+        rememberHousehold(id, code);
+        rulesMode = 'new';
+        owner = myUid();
+      } catch (e) {
+        if (e.code !== 'permission-denied') throw e;
+        // Older rules: a household lives at its code and has no owner.
+        await mod.setDoc(mod.doc(db, 'households', code), { created: mod.serverTimestamp() });
+        rememberHousehold(code, code);
+        rulesMode = 'old';
+      }
       // Upload what's on this phone first, so the household starts with it.
       synced = {};
       COLLECTIONS.forEach((name) => ready.add(name));
@@ -2793,25 +2953,39 @@ Method:
       setHouseholdStatus('Type the whole code, like PLUM-TIGER-RIVER-MANGO-42.', true);
       return;
     }
+    if (!confirm('Joining replaces the food, recipes and meal plan on this phone with the household’s. Join?')) return;
     setHouseholdStatus('Checking the code…');
     try {
       await ensureSignedIn();
       const { mod, db } = fb;
-      if (!(await mod.getDoc(mod.doc(db, 'households', code))).exists()) {
+      // Codes point to a household; households from before codes could change live at their code.
+      let id = code;
+      try {
+        const invite = await mod.getDoc(mod.doc(db, 'invites', code));
+        if (invite.exists()) id = invite.data().hid;
+      } catch (e) {
+        if (e.code !== 'permission-denied') throw e;
+      }
+      household = { id, code };
+      const result = await registerDevice(code);
+      if (result === 'removed') {
+        household = null;
+        setHouseholdStatus('That code didn’t work. Check it, or ask for the latest code: it may have been changed.', true);
+        return;
+      }
+      if (result === 'old' && !(await mod.getDoc(mod.doc(db, 'households', id))).exists()) {
+        household = null;
         setHouseholdStatus('There’s no household with that code. Check it and try again.', true);
         return;
       }
-      if (!confirm('Joining replaces the food, recipes and meal plan on this phone with the household’s. Join?')) {
-        setHouseholdStatus('');
-        return;
-      }
-      rememberHousehold(code);
+      rememberHousehold(id, code);
       synced = {};
       startListening();
       showHouseholdDialog();
       setHouseholdStatus('You’ve joined. Everything you change now is shared.');
       setTimeout(() => { $('#household-dialog').close(); if (!me()) openWhoDialog(); }, 1500);
     } catch (e) {
+      household = null;
       setHouseholdStatus('Couldn’t join. Check you have signal and try again.', true);
     }
   });
@@ -2844,13 +3018,113 @@ Method:
   }
 
   function leaveHousehold() {
+    const others = devices.filter((d) => d.uid !== myUid());
+    if (isOwnerHere() && others.length) {
+      alert('You’re the owner. Make someone else the owner first (under Phones in this household), then you can leave.');
+      return false;
+    }
     if (!confirm('Stop sharing on this phone? It keeps a copy of everything as it is now, and the others keep the household.')) return false;
+    if (fb && rulesMode === 'new' && myUid()) {
+      const batch = fb.mod.writeBatch(fb.db);
+      batch.delete(fb.mod.doc(fb.db, 'households', household.id, 'devices', myUid()));
+      batch.commit().catch(() => {});
+    }
     stopListening();
     household = null;
+    owner = null;
+    devices = [];
     synced = {};
-    try { localStorage.removeItem(HOUSEHOLD_KEY); } catch (e) { /* storage unavailable */ }
+    saveHousehold();
     setHouseholdChip();
     return true;
+  }
+
+  // ---------- Owner controls ----------
+
+  // A fresh join code. Phones already in the household stay in; the old code stops working.
+  async function changeCode(batch) {
+    const { mod, db } = fb;
+    const oldCode = household.code;
+    const code = await unusedCode();
+    batch.update(mod.doc(db, 'households', household.id), { code });
+    batch.set(mod.doc(db, 'invites', code), { hid: household.id });
+    try {
+      if ((await mod.getDoc(mod.doc(db, 'invites', oldCode))).exists()) batch.delete(mod.doc(db, 'invites', oldCode));
+    } catch (e) { /* no old invite to retire */ }
+    return code;
+  }
+
+  async function newHouseholdCode() {
+    if (!isOwnerHere()) return;
+    if (!confirm('Make a new household code? Everyone already in the household stays in, but the old code and invite links stop working.')) return;
+    try {
+      const batch = fb.mod.writeBatch(fb.db);
+      const code = await changeCode(batch);
+      await batch.commit();
+      household.code = code;
+      saveHousehold();
+      render();
+      setHomeStatus(`New code: ${code}. Send it to anyone who still needs to join.`);
+    } catch (e) {
+      setHomeStatus('Couldn’t change the code. Check you have signal and try again.');
+    }
+  }
+
+  async function removeDevice(device) {
+    if (!isOwnerHere() || device.uid === myUid()) return;
+    const label = deviceLabel(device);
+    if (!confirm(`Remove ${label} from the household? It stops getting updates straight away, and the household code changes so it can't rejoin with the old one.`)) return;
+    try {
+      const batch = fb.mod.writeBatch(fb.db);
+      batch.delete(fb.mod.doc(fb.db, 'households', household.id, 'devices', device.uid));
+      const code = await changeCode(batch);
+      await batch.commit();
+      household.code = code;
+      saveHousehold();
+      render();
+      setHomeStatus(`Removed ${label}. The new household code is ${code}.`);
+    } catch (e) {
+      setHomeStatus('Couldn’t remove that phone. Check you have signal and try again.');
+    }
+  }
+
+  async function makeOwner(device) {
+    if (!isOwnerHere()) return;
+    if (!confirm(`Make ${deviceLabel(device)} the owner? You won’t be able to change the code or remove phones any more.`)) return;
+    try {
+      const batch = fb.mod.writeBatch(fb.db);
+      batch.update(fb.mod.doc(fb.db, 'households', household.id), { owner: device.uid });
+      await batch.commit();
+      setHomeStatus(`${deviceLabel(device)} is now the owner.`);
+    } catch (e) {
+      setHomeStatus('Couldn’t change the owner. Check you have signal and try again.');
+    }
+  }
+
+  // Households from before owners existed: the first phone to claim it becomes the owner.
+  async function claimOwner() {
+    if (rulesMode !== 'new' || owner) return;
+    if (!confirm('Become the owner of this household? You’ll be able to change the code, remove phones and manage people.')) return;
+    try {
+      const { mod, db } = fb;
+      const batch = mod.writeBatch(db);
+      batch.update(mod.doc(db, 'households', household.id), { owner: myUid(), code: household.code });
+      let inviteExists = false;
+      try { inviteExists = (await mod.getDoc(mod.doc(db, 'invites', household.code))).exists(); } catch (e) { /* none */ }
+      if (!inviteExists) batch.set(mod.doc(db, 'invites', household.code), { hid: household.id });
+      await batch.commit();
+      owner = myUid();
+      render();
+      setHomeStatus('You’re now the owner of this household.');
+    } catch (e) {
+      setHomeStatus('Couldn’t make you the owner. Someone else may have just claimed it, or check your signal.');
+    }
+  }
+
+  function deviceLabel(device) {
+    const person = device.profileId && data.members.find((m) => m.id === device.profileId);
+    const name = person ? person.name : device.name;
+    return device.uid === myUid() ? 'This phone' : name ? `${name}’s phone` : 'An unnamed phone';
   }
 
   $('#household-invite').addEventListener('click', () => sendInvite(setHouseholdStatus));
@@ -2888,6 +3162,7 @@ Method:
     $('#home-sync').textContent = shared ? (householdState || 'connecting') : 'Only on this phone';
     $('#home-sync').className = `badge ${shared && householdState === 'up to date' ? 'ok' : ''}`;
     if (shared) $('#home-code').textContent = household.code;
+    renderOwnerControls(shared);
 
     const mineId = myId();
     const people = [...data.members].sort((a, b) => (b.id === mineId) - (a.id === mineId) || a.name.localeCompare(b.name));
@@ -2902,9 +3177,11 @@ Method:
           el('div', { class: 'muted person-stats' }, `Added ${plural(foods, 'food', 'foods')} · ${plural(recipes, 'recipe', 'recipes')}`)),
         el('div', { class: 'person-actions' },
           isMe ? null : el('button', { type: 'button', class: 'btn btn-small', onclick: () => { setMe(m.id); render(); } }, 'This is me'),
-          el('button', { type: 'button', class: 'btn btn-icon', title: `Edit ${m.name}`, 'aria-label': `Edit ${m.name}`, onclick: () => openProfileForm(m) }, '✎')));
+          isMe || canManagePeople() ? el('button', { type: 'button', class: 'btn btn-icon', title: `Edit ${m.name}`, 'aria-label': `Edit ${m.name}`, onclick: () => openProfileForm(m) }, '✎') : null));
     }));
     $('#home-people-empty').hidden = data.members.length > 0;
+    $('#home-add-person').hidden = !canManagePeople() && !!me();
+    $('#home-add-person').textContent = canManagePeople() ? '+ Add a person' : '+ Add me';
 
     const glance = [
       [data.items.length, 'Food in stock', 'Foods in stock'],
@@ -2920,6 +3197,39 @@ Method:
   $('#home-copy').addEventListener('click', () => copyCode(setHomeStatus));
   $('#home-leave').addEventListener('click', () => { if (leaveHousehold()) setHomeStatus('This phone has left the household. Everything is still saved here.'); });
   $('#home-start').addEventListener('click', () => showHouseholdDialog());
+  $('#home-newcode').addEventListener('click', newHouseholdCode);
+  $('#home-claim').addEventListener('click', claimOwner);
+
+  function renderOwnerControls(shared) {
+    const newRules = shared && rulesMode === 'new';
+    $('#home-owner').hidden = !newRules;
+    $('#home-newcode').hidden = !(newRules && isOwnerHere());
+    $('#home-claim').hidden = !(newRules && !owner);
+    $('#home-rules-note').hidden = !(shared && rulesMode === 'old');
+    $('#home-devices-wrap').hidden = !newRules;
+    if (!newRules) return;
+    const ownerDevice = devices.find((d) => d.uid === owner);
+    $('#home-owner').textContent = !owner
+      ? 'No one owns this household yet. The owner can change the code, remove phones and manage people.'
+      : isOwnerHere() ? 'You’re the owner. You can change the code, remove phones and manage people.'
+        : `${ownerDevice ? deviceLabel(ownerDevice).replace(/’s phone$/, '') : 'Someone'} is the owner.`;
+    const list = [...devices].sort((a, b) => (b.uid === myUid()) - (a.uid === myUid()) || String(a.joined).localeCompare(String(b.joined)));
+    $('#home-devices').replaceChildren(...list.map((d) => {
+      const person = d.profileId && data.members.find((m) => m.id === d.profileId);
+      const joined = d.joined ? new Date(d.joined).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      return el('li', { class: 'device' },
+        person ? avatar(person, 36) : el('span', { class: 'avatar avatar-empty', style: 'width:36px;height:36px;font-size:16px' }, '📱'),
+        el('div', { class: 'device-info' },
+          el('div', { class: 'device-name' }, deviceLabel(d),
+            d.uid === owner ? el('span', { class: 'you-tag owner-tag' }, 'Owner') : null),
+          el('div', { class: 'muted device-meta' }, joined ? `Joined ${joined}` : '')),
+        isOwnerHere() && d.uid !== myUid()
+          ? el('div', { class: 'device-actions' },
+              el('button', { type: 'button', class: 'btn btn-small', onclick: () => makeOwner(d) }, 'Make owner'),
+              el('button', { type: 'button', class: 'btn btn-small btn-danger', onclick: () => removeDevice(d) }, 'Remove'))
+          : null);
+    }));
+  }
   $('#home-add-person').addEventListener('click', () => openProfileForm(null));
 
   // Opened from an invite link: #join=CODE
@@ -2928,7 +3238,7 @@ Method:
     if (!match) return;
     history.replaceState(null, '', location.pathname + location.search);
     const code = normaliseCode(match[1]);
-    if (household && household.code === code) return;
+    if (household && (household.code === code || household.id === code)) return;
     if (household) {
       showHouseholdDialog();
       setHouseholdStatus(`To join ${code}, leave this household first.`, true);
@@ -2939,7 +3249,9 @@ Method:
 
   window.addEventListener('hashchange', handleInvite);
   window.addEventListener('online', () => {
-    if (household && fb) ensureSignedIn().catch(() => {});
+    if (!household || !fb) return;
+    if (needsRegister) connectHousehold();
+    else ensureSignedIn().catch(() => {});
   });
 
   render();
