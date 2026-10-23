@@ -17,9 +17,9 @@ A simple dashboard for keeping track of the food you have at home.
 - **Copy for Claude** – in a new recipe, tap **✨ Copy for Claude** to copy a ready-made request (with the link and caption) to paste into the Claude app. Claude writes the recipe in a layout the app understands; paste the reply back and tap **Fill in from text** to fill in the name, difficulty, time, ingredients and method. Free with any Claude account, no API key.
 - **Meal plan tab** – plan breakfast, lunch and dinner for each day of the week (Monday to Sunday) by picking from your saved recipes. A meal can be one full-meal recipe or several parts together, like a main, sides and a sauce. Move between weeks, clear a week, and get a shopping list of the ingredients you don't already have, which you can copy.
 - **Find a meal** – at the top of the Plan tab, filter your recipes by ingredients (e.g. "chicken, rice" finds recipes with both), themes (categories, including In season), kind and "mostly in stock", then add any of them to a day and meal. **🎡 Spin the wheel** puts the matching recipes (up to 16) on a wheel that picks one at random, ready to add to the plan.
-- **Households** – tap **🏠 Share with your household** to create a household and send an invite link; everyone who joins shares the same food list, recipes and meal plan, kept in sync between phones (and still working offline). Uses a free Firebase project – see below.
-- **Household tab** – see your household's sync status, code and invite link, everyone in it (with how much food and how many recipes each person has added), and totals for food, recipes, meals planned this week and storage places. Leave the household or add people from here too.
-- **Profiles** – tap the name button at the top to pick who you are or add a person with a name and photo. There are 24 built-in characters to choose from, 12 foods and 12 animals (`avatars.js`), and new people get a random one. Food and recipes show the picture of whoever added them. Photos are shrunk to a small square on the phone and stored with the household's data, so no paid storage is needed.
+- **Households** – tap your picture in the top-left corner, then **Create or join a household**, and send an invite link; everyone who joins shares the same food list, recipes and meal plan, kept in sync between phones (and still working offline). Uses a free Firebase project – see below.
+- **You and your household** – your picture sits in the top-left corner (with a green dot when you're sharing). Tapping it slides out a panel with your profile (Edit me, Switch person), your household's sync status, code, invite link and Leave, everyone in it (with how much food and how many recipes each person has added), totals for food, recipes, meals planned this week and storage places, and Export / Import data. It works the same on phones and computers.
+- **Profiles** – in the panel from your picture, pick who you are or add a person with a name and photo. There are 24 built-in characters to choose from, 12 foods and 12 animals (`avatars.js`), and new people get a random one. Food and recipes show the picture of whoever added them. Photos are shrunk to a small square on the phone and stored with the household's data, so no paid storage is needed.
 
 ## Running it
 
@@ -43,7 +43,7 @@ Data is saved on the device in the browser's local storage, so each phone or com
 
 ## Setting up household sharing
 
-Household sharing stores data in a Firebase project on Google's free Spark plan. The app works without it; until it's set up, the 🏠 button says sharing isn't switched on.
+Household sharing stores data in a Firebase project on Google's free Spark plan. The app works without it; until it's set up, the household section says sharing isn't switched on.
 
 1. In the [Firebase console](https://console.firebase.google.com), create a project (Google Analytics not needed).
 2. Add a **Web app** and copy its config object into `firebase-config.js` as `window.FIREBASE_CONFIG = { ... }`.

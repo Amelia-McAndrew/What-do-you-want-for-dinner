@@ -1626,14 +1626,13 @@ Method:
 
   // ---------- Tabs ----------
 
-  const TABS = ['today', 'food', 'recipes', 'plan', 'home'];
+  const TABS = ['today', 'food', 'recipes', 'plan'];
 
   function showTab(name) {
     for (const tab of TABS) {
       $(`#tab-${tab}`).setAttribute('aria-selected', String(tab === name));
       $(`#${tab}-view`).hidden = tab !== name;
     }
-    if (name === 'home') renderHousehold();
   }
 
   // The app always opens on Today, the dashboard.
@@ -1848,12 +1847,26 @@ Method:
     return el('span', { class: 'added-by', title: `Added by ${member.name}`, 'aria-label': `Added by ${member.name}` }, avatar(member, 20));
   }
 
+  // Your picture in the top-left corner, and the "You" card at the top of the panel it opens.
   function renderProfileButton() {
-    const btn = $('#profile-btn');
     const mine = me();
-    btn.replaceChildren(...(mine
-      ? [avatar(mine, 26), el('span', {}, mine.name)]
-      : [el('span', { class: 'avatar avatar-empty', style: 'width:26px;height:26px' }, '?'), el('span', {}, 'Who are you?')]));
+    const btn = $('#me-btn');
+    btn.replaceChildren(mine
+      ? avatar(mine, 44)
+      : el('span', { class: 'avatar avatar-empty', style: 'width:44px;height:44px;font-size:20px' }, '?'));
+    btn.classList.toggle('shared', !!household);
+    btn.setAttribute('aria-label', `${mine ? mine.name : 'Choose who you are'}: you and your household`);
+    btn.title = mine ? `${mine.name} · you and your household` : 'Choose who you are';
+
+    $('#me-card-avatar').replaceChildren(mine
+      ? avatar(mine, 64)
+      : el('span', { class: 'avatar avatar-empty', style: 'width:64px;height:64px;font-size:28px' }, '?'));
+    $('#me-card-name').textContent = mine ? mine.name : 'Who are you?';
+    $('#me-card-note').textContent = mine
+      ? 'This device is yours. Things you add show your picture.'
+      : 'Pick your name so everyone can see who added what.';
+    $('#me-edit').textContent = mine ? 'Edit me' : 'Add me';
+    $('#me-switch').hidden = !mine && !data.members.length;
   }
 
   const whoDialog = $('#who-dialog');
@@ -1991,7 +2004,21 @@ Method:
     if (whoDialog.open) renderWhoList();
   });
 
-  $('#profile-btn').addEventListener('click', openWhoDialog);
+  // The panel that opens from your picture: you, your household, people and your data.
+  const mePanel = $('#me-panel');
+
+  function openMePanel() {
+    renderProfileButton();
+    renderHousehold();
+    if (!mePanel.open) mePanel.showModal();
+  }
+
+  $('#me-btn').addEventListener('click', openMePanel);
+  $('#me-panel-close').addEventListener('click', () => mePanel.close());
+  // Tapping the dimmed area outside the panel closes it.
+  mePanel.addEventListener('click', (e) => { if (e.target === mePanel) mePanel.close(); });
+  $('#me-edit').addEventListener('click', () => { if (me()) openProfileForm(me()); else if (data.members.length) openWhoDialog(); else openProfileForm(null); });
+  $('#me-switch').addEventListener('click', openWhoDialog);
   $('#who-add').addEventListener('click', () => openProfileForm(null));
 
   // ---------- Household sharing ----------
@@ -2126,10 +2153,8 @@ Method:
 
   function setHouseholdChip(state) {
     householdState = household ? (state || householdState) : '';
-    if (!$('#home-view').hidden) renderHousehold();
-    const chip = $('#household-btn');
-    chip.classList.toggle('on', !!household);
-    chip.textContent = household ? `🏠 Shared with your household${state ? ` · ${state}` : ''}` : '🏠 Share with your household';
+    if ($('#me-panel').open) renderHousehold();
+    $('#me-btn').classList.toggle('shared', !!household);
     $('#saved-where').textContent = household
       ? 'Shared with your household, and saved on this device for when you’re offline.'
       : 'Everything is saved on this device.';
@@ -2215,7 +2240,6 @@ Method:
     try { localStorage.setItem(HOUSEHOLD_KEY, JSON.stringify(household)); } catch (e) { /* storage unavailable */ }
   }
 
-  $('#household-btn').addEventListener('click', () => showHouseholdDialog());
 
   $('#household-create').addEventListener('click', async () => {
     setHouseholdStatus('Creating your household…');

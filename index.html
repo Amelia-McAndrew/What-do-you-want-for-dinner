@@ -12,23 +12,23 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
   <header class="site-header">
     <div class="wrap">
-      <h1>What do you want for dinner?</h1>
-      <p class="tagline">Keep track of what's in the fridge, freezer and cupboard, and what to use first.</p>
-      <div class="header-chips">
-        <button type="button" class="profile-chip" id="profile-btn" aria-label="Choose who you are"></button>
-        <button type="button" class="household-chip" id="household-btn">🏠 Share with your household</button>
+      <div class="topbar">
+        <button type="button" class="me-btn" id="me-btn" aria-label="You and your household" aria-haspopup="dialog"></button>
+        <div class="topbar-text">
+          <h1>What do you want for dinner?</h1>
+          <p class="tagline">Keep track of what's in the fridge, freezer and cupboard, and what to use first.</p>
+        </div>
       </div>
       <nav class="tabs" role="tablist" aria-label="Sections">
         <button type="button" role="tab" class="tab" id="tab-today" aria-controls="today-view" aria-selected="true">Today</button>
         <button type="button" role="tab" class="tab" id="tab-food" aria-controls="food-view" aria-selected="false">Food</button>
         <button type="button" role="tab" class="tab" id="tab-recipes" aria-controls="recipes-view" aria-selected="false">Recipes</button>
         <button type="button" role="tab" class="tab" id="tab-plan" aria-controls="plan-view" aria-selected="false">Plan</button>
-        <button type="button" role="tab" class="tab" id="tab-home" aria-controls="home-view" aria-selected="false">Household</button>
       </nav>
     </div>
   </header>
@@ -196,49 +196,6 @@
       </section>
     </div>
 
-    <div id="home-view" role="tabpanel" aria-labelledby="tab-home" hidden>
-      <section class="panel home-card">
-        <div class="home-head">
-          <h2>🏠 Your household</h2>
-          <span id="home-sync" class="badge"></span>
-        </div>
-        <div id="home-shared" hidden>
-          <p>Everyone below shares the same food list, recipes and meal plan. To add someone, send them the invite link or give them this code:</p>
-          <p class="household-code" id="home-code"></p>
-          <div class="home-actions">
-            <button type="button" class="btn btn-primary" id="home-invite">Send invite link</button>
-            <button type="button" class="btn" id="home-copy">Copy code</button>
-            <span class="spacer"></span>
-            <button type="button" class="btn btn-small btn-danger" id="home-leave">Leave household</button>
-          </div>
-        </div>
-        <div id="home-local">
-          <p>Your lists are only on this phone at the moment. Create a household to share them with the people you live with, or join one you've been invited to.</p>
-          <button type="button" class="btn btn-primary" id="home-start">Create or join a household</button>
-        </div>
-        <p id="home-status" class="ai-status" role="status" hidden></p>
-      </section>
-
-      <section class="panel">
-        <div class="home-head">
-          <h2>People</h2>
-          <button type="button" class="btn btn-small" id="home-add-person">+ Add a person</button>
-        </div>
-        <ul id="home-people" class="people"></ul>
-        <p id="home-people-empty" class="muted" hidden>No one's been added yet. Add yourself, then everyone can see who added what.</p>
-      </section>
-
-      <section class="panel">
-        <h2>At a glance</h2>
-        <div id="home-glance" class="stats glance"></div>
-      </section>
-    </div>
-
-    <footer class="data-tools">
-      <button type="button" id="export-btn" class="btn btn-small">Export data</button>
-      <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
-      <span class="muted" id="saved-where">Everything is saved on this device.</span>
-    </footer>
   </main>
 
   <!-- Item dialog -->
@@ -448,6 +405,69 @@
     </form>
   </dialog>
 
+  <!-- You and your household (opened from your picture, top left) -->
+  <dialog id="me-panel" class="drawer" aria-labelledby="me-panel-title">
+    <div class="drawer-head">
+      <h2 id="me-panel-title">You and your household</h2>
+      <button type="button" class="btn btn-icon" id="me-panel-close" aria-label="Close">✕</button>
+    </div>
+    <section class="panel me-card">
+      <div id="me-card-avatar"></div>
+      <div class="me-card-info">
+        <p class="me-card-name" id="me-card-name"></p>
+        <p class="muted" id="me-card-note"></p>
+      </div>
+      <div class="me-card-actions">
+        <button type="button" class="btn btn-small" id="me-edit">Edit me</button>
+        <button type="button" class="btn btn-small" id="me-switch">Switch person</button>
+      </div>
+    </section>
+    <section class="panel home-card">
+      <div class="home-head">
+        <h2>🏠 Your household</h2>
+        <span id="home-sync" class="badge"></span>
+      </div>
+      <div id="home-shared" hidden>
+        <p>Everyone below shares the same food list, recipes and meal plan. To add someone, send them the invite link or give them this code:</p>
+        <p class="household-code" id="home-code"></p>
+        <div class="home-actions">
+          <button type="button" class="btn btn-primary" id="home-invite">Send invite link</button>
+          <button type="button" class="btn" id="home-copy">Copy code</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-small btn-danger" id="home-leave">Leave household</button>
+        </div>
+      </div>
+      <div id="home-local">
+        <p>Your lists are only on this phone at the moment. Create a household to share them with the people you live with, or join one you've been invited to.</p>
+        <button type="button" class="btn btn-primary" id="home-start">Create or join a household</button>
+      </div>
+      <p id="home-status" class="ai-status" role="status" hidden></p>
+    </section>
+
+    <section class="panel">
+      <div class="home-head">
+        <h2>People</h2>
+        <button type="button" class="btn btn-small" id="home-add-person">+ Add a person</button>
+      </div>
+      <ul id="home-people" class="people"></ul>
+      <p id="home-people-empty" class="muted" hidden>No one's been added yet. Add yourself, then everyone can see who added what.</p>
+    </section>
+
+    <section class="panel">
+      <h2>At a glance</h2>
+      <div id="home-glance" class="stats glance"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Your data</h2>
+      <div class="data-tools">
+        <button type="button" id="export-btn" class="btn btn-small">Export data</button>
+        <label class="btn btn-small">Import data<input type="file" id="import-file" accept="application/json" hidden></label>
+        <span class="muted" id="saved-where">Everything is saved on this device.</span>
+      </div>
+    </section>
+  </dialog>
+
   <!-- Recipe view (from Today) -->
   <dialog id="recipe-view">
     <form method="dialog">
@@ -573,8 +593,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=22"></script>
-  <script src="firebase-config.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="avatars.js?v=23"></script>
+  <script src="firebase-config.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
