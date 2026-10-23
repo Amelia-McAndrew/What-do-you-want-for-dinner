@@ -1426,7 +1426,7 @@ Method:
   function renderShopList(container, prefix) {
     const pending = data.shopping.filter((s) => !s.done);
     const done = data.shopping.filter((s) => s.done);
-    const suggestions = shopSuggestions();
+    const suggestions = prefix === 'dash' ? shopSuggestions() : [];
     const row = (item) => {
       const id = `${prefix}-shop-${item.id}`;
       const who = item.addedBy && data.members.find((m) => m.id === item.addedBy);
@@ -1527,7 +1527,85 @@ Method:
 
   function renderShopTab() {
     renderShopList($('#tab-shop-list'), 'tab');
+    renderFill();
   }
+
+  // "Fill from meal plan": add what the meals between two dates need.
+  function fillRange() {
+    const from = $('#fill-from').value;
+    const to = $('#fill-to').value;
+    if (!from || !to) return null;
+    const start = new Date(`${from}T00:00:00`);
+    const end = new Date(`${to}T00:00:00`);
+    if (end < start) return { error: 'The end date is before the start date.' };
+    const days = Math.round((end - start) / 86400000) + 1;
+    if (days > 62) return { error: 'Pick up to two months at a time.' };
+    const recipes = [];
+    let meals = 0;
+    for (let i = 0; i < days; i++) {
+      const date = addDays(start, i);
+      for (const [meal] of MEALS) {
+        const dishes = dayRecipes(date, meal);
+        if (dishes.length) meals++;
+        recipes.push(...dishes);
+      }
+    }
+    const needed = shoppingList(recipes).filter(({ line }) => !onShoppingList(line));
+    return { meals, needed };
+  }
+
+  function setFillRange(fromDate, toDate) {
+    $('#fill-from').value = isoDate(fromDate);
+    $('#fill-to').value = isoDate(toDate);
+    renderFill();
+  }
+
+  function renderFill() {
+    if (!$('#fill-from').value) setFillDefaults();
+    const result = fillRange();
+    const summary = $('#fill-summary');
+    const preview = $('#fill-preview');
+    const button = $('#fill-add');
+    if (!result || result.error) {
+      summary.textContent = result ? result.error : 'Pick the dates to shop for.';
+      preview.replaceChildren();
+      button.disabled = true;
+      return;
+    }
+    const { meals, needed } = result;
+    summary.textContent = !meals
+      ? 'No meals are planned for those dates yet.'
+      : needed.length
+        ? `${plural(meals, 'meal', 'meals')} planned. ${plural(needed.length, 'thing isn’t', 'things aren’t')} in stock or on the list:`
+        : `${plural(meals, 'meal', 'meals')} planned, and you already have or are getting everything for them.`;
+    const shown = needed.slice(0, 8);
+    preview.replaceChildren(...shown.map(({ line, recipes }) =>
+      el('li', {}, line, el('span', { class: 'for' }, ` · ${[...recipes].join(', ')}`))),
+      ...(needed.length > shown.length ? [el('li', { class: 'muted' }, `and ${needed.length - shown.length} more`)] : []));
+    button.disabled = needed.length === 0;
+    button.textContent = needed.length ? `Add ${plural(needed.length, 'thing', 'things')} to list` : 'Add to list';
+  }
+
+  function setFillDefaults() {
+    const today = addDays(new Date(), 0);
+    $('#fill-from').value = isoDate(today);
+    $('#fill-to').value = isoDate(addDays(today, 6));
+  }
+
+  $('#fill-from').addEventListener('change', renderFill);
+  $('#fill-to').addEventListener('change', renderFill);
+  $('#fill-next7').addEventListener('click', () => setFillRange(addDays(new Date(), 0), addDays(new Date(), 6)));
+  $('#fill-thisweek').addEventListener('click', () => { const m = mondayOf(new Date()); setFillRange(m, addDays(m, 6)); });
+  $('#fill-nextweek').addEventListener('click', () => { const m = addDays(mondayOf(new Date()), 7); setFillRange(m, addDays(m, 6)); });
+  $('#fill-add').addEventListener('click', () => {
+    const result = fillRange();
+    if (!result || result.error || !result.needed.length) return;
+    let added = 0;
+    for (const { line, recipes } of result.needed) if (addToShopping(line, [...recipes].join(', '))) added++;
+    save();
+    render();
+    flashShop('tab', `Added ${plural(added, 'thing', 'things')} to your shopping list.`);
+  });
 
   // When a meal is added to the plan, ask about any ingredients that aren't in stock.
   const missingDialog = $('#missing-dialog');

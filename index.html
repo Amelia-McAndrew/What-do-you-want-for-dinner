@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=24">
+  <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
   <header class="site-header">
@@ -204,6 +204,27 @@
         </div>
         <p class="muted widget-note">Add anything you need. Separate several things with commas. Tick them off as you shop, then put them in Food when you're home.</p>
         <div id="tab-shop-list" class="shop"></div>
+      </section>
+
+      <section class="panel widget fill">
+        <h2>Fill from meal plan</h2>
+        <p class="muted widget-note">Pick the dates you're shopping for, and add anything the planned meals need that you don't already have.</p>
+        <div class="fill-presets">
+          <button type="button" class="btn btn-small" id="fill-next7">Next 7 days</button>
+          <button type="button" class="btn btn-small" id="fill-thisweek">This week</button>
+          <button type="button" class="btn btn-small" id="fill-nextweek">Next week</button>
+        </div>
+        <div class="row">
+          <label>From
+            <input type="date" id="fill-from">
+          </label>
+          <label>To
+            <input type="date" id="fill-to">
+          </label>
+        </div>
+        <p id="fill-summary" class="fill-summary"></p>
+        <ul id="fill-preview" class="fill-preview"></ul>
+        <button type="button" class="btn btn-primary" id="fill-add">Add to list</button>
       </section>
     </div>
 
@@ -619,8 +640,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=24"></script>
-  <script src="firebase-config.js?v=24"></script>
-  <script src="app.js?v=24"></script>
+  <script src="avatars.js?v=25"></script>
+  <script src="firebase-config.js?v=25"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

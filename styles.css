@@ -762,3 +762,16 @@ dialog.drawer[open] { display: flex; animation: drawer-in 0.22s ease-out; }
 .missing-name { font-weight: 600; overflow-wrap: anywhere; }
 .missing-controls { display: flex; gap: 6px; flex-wrap: wrap; }
 .missing-controls select { flex: 1 1 140px; width: auto; }
+
+/* Fill from meal plan */
+#shop-view { display: flex; flex-direction: column; gap: 16px; }
+#shop-view[hidden] { display: none; }
+.fill label { margin: 0; font-size: 0.9rem; }
+.fill label input { margin-top: 4px; }
+.fill-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.fill-summary { margin: 0; font-size: 0.92rem; }
+.fill-preview { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
+.fill-preview:empty { display: none; }
+.fill-preview .for { color: var(--muted); font-size: 0.85rem; }
+#fill-add { align-self: flex-start; }
+#fill-add:disabled { opacity: 0.55; cursor: not-allowed; }
