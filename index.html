@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
   <header class="site-header">
@@ -155,6 +155,27 @@
     </div>
 
     <div id="plan-view" role="tabpanel" aria-labelledby="tab-plan" hidden>
+      <section class="panel finder">
+        <div class="widget-head">
+          <h2>Find a meal</h2>
+          <span class="muted" id="finder-count"></span>
+        </div>
+        <div class="finder-filters">
+          <input type="search" id="finder-ingredients" placeholder="Ingredients, e.g. chicken, rice" aria-label="Filter by ingredients">
+          <select id="finder-kind" aria-label="Filter by kind">
+            <option value="">All kinds</option>
+          </select>
+          <label class="check-label"><input type="checkbox" id="finder-stock"> Mostly in stock</label>
+        </div>
+        <div id="finder-themes" class="cat-options" role="group" aria-label="Themes"></div>
+        <div class="finder-actions">
+          <button type="button" class="btn btn-primary" id="finder-spin">🎡 Spin the wheel</button>
+          <button type="button" class="btn btn-small" id="finder-clear" hidden>Clear filters</button>
+        </div>
+        <ul id="finder-list" class="finder-list"></ul>
+        <p id="finder-empty" class="muted" hidden></p>
+      </section>
+
       <section class="week-nav">
         <button type="button" class="btn btn-icon" id="week-prev" aria-label="Previous week">‹</button>
         <h2 id="week-label">This week</h2>
@@ -472,6 +493,57 @@
     </form>
   </dialog>
 
+  <!-- Add a recipe to the plan -->
+  <dialog id="add-plan-dialog">
+    <form id="add-plan-form" method="dialog">
+      <h2 id="add-plan-title">Add to plan</h2>
+      <div class="row">
+        <label>Day
+          <select id="add-plan-day"></select>
+        </label>
+        <label>Meal
+          <select id="add-plan-meal">
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted field-hint">If there's already something planned, this is added alongside it.</p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Add to plan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Spinning wheel -->
+  <dialog id="wheel-dialog">
+    <form method="dialog">
+      <h2>Spin the wheel</h2>
+      <p id="wheel-note" class="muted"></p>
+      <div class="wheel-wrap">
+        <div class="wheel-pointer" aria-hidden="true"></div>
+        <canvas id="wheel" class="wheel" role="img" aria-label="A wheel of recipes. Tap Spin to pick one."></canvas>
+      </div>
+      <div id="wheel-result" class="wheel-result" role="status" hidden>
+        <p class="muted">The wheel picked</p>
+        <p id="wheel-result-name" class="wheel-result-name"></p>
+        <p id="wheel-result-meta" class="muted"></p>
+        <div class="wheel-result-actions">
+          <button type="button" class="btn btn-primary" id="wheel-add">Add to plan</button>
+          <button type="button" class="btn" id="wheel-view">See recipe</button>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-primary" id="wheel-spin">Spin</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Place dialog -->
   <dialog id="place-dialog">
     <form id="place-form" method="dialog">
@@ -501,8 +573,8 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=21"></script>
-  <script src="firebase-config.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="avatars.js?v=22"></script>
+  <script src="firebase-config.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

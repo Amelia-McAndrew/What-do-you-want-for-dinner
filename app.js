@@ -917,7 +917,232 @@ Method:
     return select;
   }
 
+  // ---------- Find a meal (filters + spinning wheel) ----------
+
+  const finder = { words: [], tags: new Set(), kind: '', stock: false };
+
+  function finderMatches() {
+    const season = currentSeason();
+    return data.recipes.filter((r) => {
+      const ingredients = singular(r.ingredients.join(' \n '));
+      if (!finder.words.every((w) => ingredients.includes(w) || singular(r.name).includes(w))) return false;
+      for (const tag of finder.tags) {
+        if (tag === '@season' ? !tagsOf(r).includes(season) : !tagsOf(r).includes(tag)) return false;
+      }
+      if (finder.kind && kindOf(r) !== finder.kind) return false;
+      if (finder.stock) {
+        const stock = recipeStock(r);
+        if (!stock.total || stock.have * 2 < stock.total) return false;
+      }
+      return true;
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function renderFinder() {
+    const season = currentSeason();
+    const used = new Set(data.recipes.flatMap(tagsOf));
+    const order = CATEGORY_GROUPS.flatMap(([, cats]) => cats.map(([id]) => id));
+    const themes = ['@season', ...order.filter((id) => used.has(id)), ...[...used].filter((t) => !CATEGORY_INFO[t]).sort()];
+    $('#finder-themes').replaceChildren(...themes.map((tag) => el('button', {
+      type: 'button',
+      class: `cat-option ${finder.tags.has(tag) ? 'selected' : ''}`,
+      'aria-pressed': String(finder.tags.has(tag)),
+      onclick: () => { if (finder.tags.has(tag)) finder.tags.delete(tag); else finder.tags.add(tag); renderFinder(); },
+    }, tag === '@season' ? `${CATEGORY_INFO[season].icon} In season` : catLabel(tag))));
+
+    const matches = finderMatches();
+    const filtering = finder.words.length || finder.tags.size || finder.kind || finder.stock;
+    $('#finder-count').textContent = data.recipes.length
+      ? `${matches.length} of ${data.recipes.length} recipe${data.recipes.length === 1 ? '' : 's'}`
+      : '';
+    $('#finder-clear').hidden = !filtering;
+    $('#finder-spin').disabled = matches.length < 2;
+    $('#finder-spin').title = matches.length < 2 ? 'Needs at least 2 matching recipes' : '';
+    $('#finder-list').replaceChildren(...matches.map((r) => {
+      const stock = recipeStock(r);
+      const kind = kindOf(r);
+      return el('li', { class: 'finder-row' },
+        el('button', { type: 'button', class: 'finder-name', onclick: () => openRecipeView(r) },
+          el('span', { class: 'dash-dish-name' }, kind !== 'meal' ? `${KIND_INFO[kind].icon} ` : '', r.name),
+          el('span', { class: 'dash-dish-meta' },
+            [r.time ? `⏱ ${timeText(r.time)}` : null, stock.total ? `${stock.have}/${stock.total} in stock` : null,
+              tagsOf(r).slice(0, 3).map(catLabel).join(' ')].filter(Boolean).join(' · '))),
+        el('button', { type: 'button', class: 'btn btn-small', onclick: () => openAddToPlan(r) }, '+ Add'));
+    }));
+    $('#finder-empty').hidden = matches.length > 0;
+    $('#finder-empty').textContent = data.recipes.length
+      ? 'No recipes match those filters. Try removing one.'
+      : 'Add some recipes in the Recipes tab to search them here.';
+  }
+
+  $('#finder-ingredients').addEventListener('input', (e) => {
+    finder.words = e.target.value.split(',').map((w) => singular(w.trim())).filter((w) => w.length >= 2);
+    renderFinder();
+  });
+  $('#finder-kind').append(...KINDS.map(([id, icon, , plural]) => el('option', { value: id }, `${icon} ${plural}`)));
+  $('#finder-kind').addEventListener('change', (e) => { finder.kind = e.target.value; renderFinder(); });
+  $('#finder-stock').addEventListener('change', (e) => { finder.stock = e.target.checked; renderFinder(); });
+  $('#finder-clear').addEventListener('click', () => {
+    finder.words = []; finder.tags.clear(); finder.kind = ''; finder.stock = false;
+    $('#finder-ingredients').value = ''; $('#finder-kind').value = ''; $('#finder-stock').checked = false;
+    renderFinder();
+  });
+
+  // "Add to plan": pick a day of the week being viewed, and a meal.
+  const addPlanDialog = $('#add-plan-dialog');
+  let addingRecipe = null;
+
+  function openAddToPlan(recipe) {
+    addingRecipe = recipe;
+    $('#add-plan-title').textContent = `Add ${recipe.name}`;
+    const todayIso = isoDate(new Date());
+    $('#add-plan-day').replaceChildren(...weekDays().map((d) => el('option', { value: isoDate(d) },
+      `${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}${isoDate(d) === todayIso ? ' (today)' : ''}`)));
+    const days = weekDays().map(isoDate);
+    $('#add-plan-day').value = days.includes(todayIso) ? todayIso : days[0];
+    $('#add-plan-meal').value = new Date().getHours() < 10 ? 'breakfast' : new Date().getHours() < 15 ? 'lunch' : 'dinner';
+    if (kindOf(recipe) === 'meal' || kindOf(recipe) === 'main') $('#add-plan-meal').value = 'dinner';
+    addPlanDialog.showModal();
+  }
+
+  $('#add-plan-form').addEventListener('submit', () => {
+    if (!addingRecipe) return;
+    addDish($('#add-plan-day').value, $('#add-plan-meal').value, addingRecipe.id);
+  });
+
+  // The spinning wheel.
+  const wheelDialog = $('#wheel-dialog');
+  const WHEEL_COLOURS = ['#2f7a4f', '#e2683c', '#3a6ea5', '#d9a12b', '#a0527a', '#1f8a8a', '#7a4fa0', '#b83232', '#5a8f2f', '#c46a1f', '#4a5bb0', '#8a6b3a'];
+  const WHEEL_MAX = 16;
+  let wheelRecipes = [];
+  let wheelAngle = 0;
+  let spinning = false;
+
+  function shuffle(list) {
+    const a = [...list];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function drawWheel() {
+    const canvas = $('#wheel');
+    const ratio = window.devicePixelRatio || 1;
+    const size = canvas.clientWidth || 300;
+    canvas.width = size * ratio;
+    canvas.height = size * ratio;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    const r = size / 2;
+    const n = wheelRecipes.length;
+    const slice = (Math.PI * 2) / n;
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(r, r);
+    ctx.rotate(wheelAngle);
+    wheelRecipes.forEach((recipe, i) => {
+      // Slice i is centred straight up when wheelAngle = -i * slice.
+      const start = -Math.PI / 2 + i * slice - slice / 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, r - 4, start, start + slice);
+      ctx.closePath();
+      ctx.fillStyle = WHEEL_COLOURS[i % WHEEL_COLOURS.length];
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.save();
+      ctx.rotate(start + slice / 2);
+      ctx.fillStyle = '#fff';
+      ctx.font = `600 ${n > 10 ? 11 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      let label = recipe.name;
+      const maxWidth = r - 34;
+      while (label.length > 3 && ctx.measureText(label).width > maxWidth) label = `${label.slice(0, -2)}…`;
+      ctx.fillText(label, r - 14, 0);
+      ctx.restore();
+    });
+    ctx.restore();
+    // Hub
+    ctx.beginPath();
+    ctx.arc(r, r, 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#2b2622';
+    ctx.stroke();
+  }
+
+  function openWheel() {
+    const matches = finderMatches();
+    if (matches.length < 2) return;
+    wheelRecipes = matches.length > WHEEL_MAX ? shuffle(matches).slice(0, WHEEL_MAX) : shuffle(matches);
+    wheelAngle = 0;
+    $('#wheel-note').textContent = matches.length > WHEEL_MAX
+      ? `${WHEEL_MAX} of your ${matches.length} matching recipes, picked at random.`
+      : `${matches.length} recipes on the wheel.`;
+    $('#wheel-result').hidden = true;
+    wheelDialog.showModal();
+    drawWheel();
+  }
+
+  function spinWheel() {
+    if (spinning) return;
+    spinning = true;
+    $('#wheel-result').hidden = true;
+    $('#wheel-spin').disabled = true;
+    const n = wheelRecipes.length;
+    const slice = (Math.PI * 2) / n;
+    const winner = Math.floor(Math.random() * n);
+    // Land the winner under the pointer at the top, a little off-centre so it feels natural.
+    const wobble = (Math.random() - 0.5) * slice * 0.6;
+    const base = wheelAngle % (Math.PI * 2);
+    const target = -winner * slice + wobble;
+    const turns = 5 + Math.floor(Math.random() * 3);
+    const from = wheelAngle;
+    let delta = target - base;
+    while (delta < 0) delta += Math.PI * 2;
+    const to = from + delta + turns * Math.PI * 2;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const duration = reduce ? 300 : 4200;
+    const startTime = performance.now();
+    const ease = (t) => 1 - Math.pow(1 - t, 4);
+    const step = (now) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      wheelAngle = from + (to - from) * ease(t);
+      drawWheel();
+      if (t < 1) { requestAnimationFrame(step); return; }
+      spinning = false;
+      $('#wheel-spin').disabled = false;
+      $('#wheel-spin').textContent = 'Spin again';
+      showWheelResult(wheelRecipes[winner]);
+    };
+    requestAnimationFrame(step);
+  }
+
+  let wheelWinner = null;
+  function showWheelResult(recipe) {
+    wheelWinner = recipe;
+    const stock = recipeStock(recipe);
+    $('#wheel-result-name').textContent = recipe.name;
+    $('#wheel-result-meta').textContent = [recipe.time ? `⏱ ${timeText(recipe.time)}` : null,
+      DIFFICULTY[recipe.difficulty], stock.total ? `${stock.have}/${stock.total} ingredients in stock` : null].filter(Boolean).join(' · ');
+    $('#wheel-result').hidden = false;
+  }
+
+  $('#finder-spin').addEventListener('click', openWheel);
+  $('#wheel-spin').addEventListener('click', spinWheel);
+  $('#wheel').addEventListener('click', spinWheel);
+  $('#wheel-add').addEventListener('click', () => { if (wheelWinner) { wheelDialog.close(); openAddToPlan(wheelWinner); } });
+  $('#wheel-view').addEventListener('click', () => { if (wheelWinner) { wheelDialog.close(); openRecipeView(wheelWinner); } });
+  wheelDialog.addEventListener('close', () => { $('#wheel-spin').textContent = 'Spin'; });
+
   function renderPlan() {
+    renderFinder();
     $('#week-label').textContent = weekLabel();
     $('#plan-no-recipes').hidden = data.recipes.length > 0;
     const todayIso = isoDate(new Date());
