@@ -791,3 +791,63 @@ dialog.drawer[open] { display: flex; animation: drawer-in 0.22s ease-out; }
 .device-meta { font-size: 0.8rem; }
 .device-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .owner-tag { background: var(--warn-bg); color: var(--warn); }
+
+/* Gifts */
+.gift-due-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.gift-due.done { background: var(--bg); }
+.gift-due .warn-where:last-child { font-size: 0.85rem; overflow-wrap: anywhere; }
+.gift-year { font-weight: 600; min-width: 3.5em; text-align: center; align-self: center; }
+.gift-stats { margin: 0; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.gift-stats .stat { background: var(--bg); }
+.gift-stats .stat-value { font-size: 1.5rem; }
+.gift-table-wrap { overflow-x: auto; }
+.gift-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.gift-table caption { text-align: left; caption-side: top; }
+.gift-table th, .gift-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
+.gift-table th:first-child, .gift-table td:first-child { text-align: left; overflow-wrap: anywhere; }
+.gift-table tr:last-child td { border-bottom: none; }
+.gift-private { margin: -6px 0 12px; }
+.gift-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+@media (max-width: 380px) {
+  .gift-people { grid-template-columns: 1fr; }
+}
+.gift-meta { margin: 10px 14px 0; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gift-person-notes { white-space: pre-line; overflow-wrap: anywhere; }
+.gift-list { margin-top: 8px; border-top: 1px solid var(--border); }
+.gift-row {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gift-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.gift-what { font-weight: 600; overflow-wrap: anywhere; }
+.gift-notes { font-size: 0.8rem; overflow-wrap: anywhere; }
+.gift-cost { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gift-status { font: inherit; font-size: 0.8rem; cursor: pointer; background: none; white-space: nowrap; }
+.gift-status.bought { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+.gift-status.sent { color: var(--ok); border-color: currentColor; }
+.gift-history { margin: -4px 0 8px; }
+.field-label { margin: 0 0 4px; font-size: 0.9rem; }
+.row-3 { grid-template-columns: 0.7fr 1.3fr 1fr; }
+.gperson-check { display: flex; margin-bottom: 12px; white-space: normal; }
+.gperson-check input { margin-top: 0; }

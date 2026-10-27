@@ -336,6 +336,7 @@
     renderHousehold();
     renderToday();
     renderShopTab();
+    renderGifts();
   }
 
   function renderStats() {
@@ -1552,6 +1553,7 @@ Method:
     renderDayByDay();
     renderWarnings();
     renderDashShopping();
+    renderDashGifts();
   }
 
   function renderDayByDay() {
@@ -2146,9 +2148,366 @@ Method:
     if (viewing) openRecipeDialog(viewing);
   });
 
+  // ---------- Gifts ----------
+  //
+  // People you buy presents for, with their birthdays, and what you've got them each
+  // Christmas and birthday. Kept on this phone only (not in the household), so presents for
+  // people in the household stay a surprise.
+
+  const GIFTS_KEY = 'wdywfd-gifts-v1';
+  const OCCASIONS = { christmas: { icon: '🎄', label: 'Christmas' }, birthday: { icon: '🎂', label: 'Birthday' } };
+  const GIFT_STATUS = { idea: { icon: '💡', label: 'Idea' }, bought: { icon: '🛍️', label: 'Bought' }, sent: { icon: '✅', label: 'Sent' } };
+  const NEXT_STATUS = { idea: 'bought', bought: 'sent', sent: 'idea' };
+  const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(undefined, { month: 'long' }));
+  const DASH_DAYS = { birthday: 30, christmas: 60 };   // how far ahead the Today card looks
+  const UPCOMING_DAYS = 90;
+
+  let gifts = loadGifts();
+  let giftYear = today().getFullYear();
+
+  function validGifts(value) {
+    return value && Array.isArray(value.people) && Array.isArray(value.gifts);
+  }
+
+  function loadGifts() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(GIFTS_KEY) || 'null');
+      if (validGifts(parsed)) return parsed;
+    } catch (e) { /* fall through to empty */ }
+    return { people: [], gifts: [] };
+  }
+
+  function saveGifts() {
+    try { localStorage.setItem(GIFTS_KEY, JSON.stringify(gifts)); } catch (e) { /* storage unavailable */ }
+  }
+
+  const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'GBP' });
+  function moneyText(n) {
+    const text = money.format(n || 0);
+    return Number.isInteger(n || 0) ? text.replace(/\.00$/, '') : text;
+  }
+
+  // A date in a given year, with 29 February falling on the 28th in other years.
+  function dateInYear(year, month, day) {
+    const last = new Date(year, month, 0).getDate();
+    return new Date(year, month - 1, Math.min(day, last));
+  }
+
+  // The next time an occasion comes round for a person (today counts), or null.
+  function nextOccasion(person, occasion, from = today()) {
+    let date;
+    if (occasion === 'christmas') {
+      if (person.christmas === false) return null;
+      date = new Date(from.getFullYear(), 11, 25);
+      if (date < from) date = new Date(from.getFullYear() + 1, 11, 25);
+    } else {
+      if (!person.bday) return null;
+      const { day, month } = person.bday;
+      date = dateInYear(from.getFullYear(), month, day);
+      if (date < from) date = dateInYear(from.getFullYear() + 1, month, day);
+    }
+    const days = Math.round((date - from) / 86400000);
+    const age = occasion === 'birthday' && person.bday.year ? date.getFullYear() - person.bday.year : null;
+    return { person, occasion, date, year: date.getFullYear(), days, age };
+  }
+
+  function upcoming(limit) {
+    const list = [];
+    for (const person of gifts.people) {
+      for (const occasion of Object.keys(OCCASIONS)) {
+        const next = nextOccasion(person, occasion);
+        if (next && next.days <= (typeof limit === 'number' ? limit : limit[occasion])) list.push(next);
+      }
+    }
+    return list.sort((a, b) => a.days - b.days || a.person.name.localeCompare(b.person.name));
+  }
+
+  function giftsFor(personId, occasion, year) {
+    return gifts.gifts.filter((g) => g.personId === personId && (!occasion || g.occasion === occasion) && g.year === year);
+  }
+
+  // Where an occasion's presents are at: nothing yet, only ideas, bought but not all sent, or all sent.
+  function occasionState(list) {
+    if (!list.length) return 'none';
+    if (list.every((g) => g.status === 'sent')) return 'sent';
+    if (list.some((g) => g.status !== 'idea')) return 'bought';
+    return 'idea';
+  }
+
+  const STATE_TEXT = { none: 'Nothing yet', idea: 'Only ideas', bought: 'Not sent yet', sent: 'Sent' };
+
+  function whenText(occ) {
+    const date = occ.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    const when = occ.days === 0 ? 'today' : occ.days === 1 ? 'tomorrow' : `in ${occ.days} days`;
+    return `${date} · ${when}${occ.age ? ` · turning ${occ.age}` : ''}`;
+  }
+
+  function spent(list) {
+    return list.filter((g) => g.status !== 'idea').reduce((sum, g) => sum + (g.cost || 0), 0);
+  }
+
+  // One row for a birthday or Christmas coming up, with what to do next.
+  function dueRow(occ) {
+    const list = giftsFor(occ.person.id, occ.occasion, occ.year);
+    const state = occasionState(list);
+    const urgent = state !== 'sent' && occ.days <= 7;
+    const cls = state === 'sent' ? 'done' : urgent ? 'gone' : '';
+    const bought = list.filter((g) => g.status === 'bought');
+    const what = list.length
+      ? list.map((g) => `${GIFT_STATUS[g.status].icon} ${g.what}`).join(', ')
+      : 'No present yet';
+    return el('li', { class: `warn-row gift-due ${cls}` },
+      el('div', { class: 'warn-info' },
+        el('span', { class: 'warn-name' }, `${OCCASIONS[occ.occasion].icon} ${occ.person.name}`),
+        el('span', { class: 'muted warn-where' }, `${OCCASIONS[occ.occasion].label} – ${whenText(occ)}`),
+        el('span', { class: 'warn-where' }, what)),
+      el('span', { class: `badge ${state === 'sent' ? 'ok' : urgent || state === 'none' ? 'bad' : 'warn'}` }, STATE_TEXT[state]),
+      bought.length
+        ? el('button', { type: 'button', class: 'btn btn-small', onclick: () => {
+            bought.forEach((g) => { g.status = 'sent'; });
+            saveGifts();
+            renderGiftsEverywhere();
+          } }, 'Mark sent')
+        : state === 'sent'
+          ? null
+          : el('button', { type: 'button', class: 'btn btn-small', onclick: () => openGiftDialog(null, occ.person.id, occ.occasion, occ.year) }, '+ Present'));
+  }
+
+  // The Today card: anything coming up soon that isn't sent yet.
+  function renderDashGifts() {
+    const due = upcoming(DASH_DAYS).filter((occ) => occasionState(giftsFor(occ.person.id, occ.occasion, occ.year)) !== 'sent');
+    $('#dash-gifts').replaceChildren(...due.map(dueRow));
+    $('#dash-gifts-empty').hidden = due.length > 0;
+    $('#dash-gifts-empty').textContent = gifts.people.length
+      ? 'No birthdays or Christmas presents to sort out soon. 🎉'
+      : 'Add the people you buy presents for in the Gifts tab, and they’ll show up here before their birthdays and Christmas.';
+    $('#dash-gift-count').textContent = due.length ? String(due.length) : '';
+    $('#dash-gift-count').hidden = !due.length;
+  }
+
+  function birthdayText(person) {
+    if (!person.bday) return 'No birthday';
+    const { day, month, year } = person.bday;
+    return `🎂 ${day} ${MONTHS[month - 1]}${year ? ` ${year}` : ''}`;
+  }
+
+  function giftRow(gift) {
+    const status = GIFT_STATUS[gift.status] || GIFT_STATUS.idea;
+    return el('li', { class: 'gift-row' },
+      el('button', { type: 'button', class: 'gift-main', onclick: () => openGiftDialog(gift) },
+        el('span', { class: 'gift-what' }, `${OCCASIONS[gift.occasion].icon} ${gift.what}`),
+        gift.notes ? el('span', { class: 'muted gift-notes' }, gift.notes) : null),
+      el('span', { class: 'gift-cost' }, gift.cost ? moneyText(gift.cost) : ''),
+      el('button', { type: 'button', class: `badge gift-status ${gift.status}`, title: 'Tap to change', onclick: () => {
+        gift.status = NEXT_STATUS[gift.status] || 'bought';
+        saveGifts();
+        renderGiftsEverywhere();
+      } }, `${status.icon} ${status.label}`));
+  }
+
+  function personCard(person) {
+    const list = gifts.gifts.filter((g) => g.personId === person.id && g.year === giftYear)
+      .sort((a, b) => a.occasion.localeCompare(b.occasion) || a.what.localeCompare(b.what));
+    const meta = [birthdayText(person)];
+    if (person.christmas === false) meta.push('No Christmas present');
+    if (person.budget) meta.push(`Budget ${moneyText(person.budget)}`);
+    const over = Object.keys(OCCASIONS).filter((occ) => person.budget && spent(list.filter((g) => g.occasion === occ)) > person.budget);
+    const total = spent(list);
+    return el('article', { class: 'place gift-person' },
+      el('div', { class: 'place-head' },
+        el('h3', {}, person.name),
+        el('span', { class: 'place-count' }, total ? moneyText(total) : ''),
+        el('button', { type: 'button', class: 'btn btn-icon', title: `Edit ${person.name}`, 'aria-label': `Edit ${person.name}`, onclick: () => openPersonDialog(person) }, '✏️')),
+      el('p', { class: 'muted gift-meta' }, meta.join(' · '),
+        over.length ? el('span', { class: 'badge bad' }, `Over budget for ${over.map((o) => OCCASIONS[o].label).join(' and ')}`) : null),
+      person.notes ? el('p', { class: 'muted gift-meta gift-person-notes' }, person.notes) : null,
+      list.length
+        ? el('ul', { class: 'items gift-list' }, list.map(giftRow))
+        : el('p', { class: 'place-empty' }, `Nothing for ${giftYear} yet.`),
+      el('button', { type: 'button', class: 'btn btn-small place-add', onclick: () => openGiftDialog(null, person.id) }, '+ Present'));
+  }
+
+  function renderGifts() {
+    const up = upcoming(UPCOMING_DAYS);
+    $('#gift-upcoming').replaceChildren(...up.map(dueRow));
+    $('#gift-upcoming-empty').hidden = up.length > 0;
+    $('#gift-upcoming-empty').textContent = gifts.people.length ? 'No birthdays or Christmas in the next 90 days.' : 'Add people below to see their birthdays here.';
+
+    // Spending for the year being viewed.
+    $('#gift-year').textContent = String(giftYear);
+    const yearGifts = gifts.gifts.filter((g) => g.year === giftYear);
+    $('#gift-total').textContent = moneyText(spent(yearGifts));
+    $('#gift-xmas').textContent = moneyText(spent(yearGifts.filter((g) => g.occasion === 'christmas')));
+    $('#gift-bday').textContent = moneyText(spent(yearGifts.filter((g) => g.occasion === 'birthday')));
+    $('#gift-planned').textContent = moneyText(yearGifts.filter((g) => g.status === 'idea').reduce((s, g) => s + (g.cost || 0), 0));
+    const rows = gifts.people
+      .map((p) => ({ p, list: yearGifts.filter((g) => g.personId === p.id) }))
+      .filter(({ list }) => list.length)
+      .sort((a, b) => spent(b.list) - spent(a.list) || a.p.name.localeCompare(b.p.name));
+    $('#gift-table').replaceChildren(...(rows.length ? [
+      el('thead', {}, el('tr', {}, el('th', {}, 'Person'), el('th', {}, '🎄'), el('th', {}, '🎂'), el('th', {}, 'Total'))),
+      el('tbody', {}, rows.map(({ p, list }) => el('tr', {},
+        el('td', {}, p.name),
+        el('td', {}, moneyText(spent(list.filter((g) => g.occasion === 'christmas')))),
+        el('td', {}, moneyText(spent(list.filter((g) => g.occasion === 'birthday')))),
+        el('td', {}, el('strong', {}, moneyText(spent(list))))))),
+    ] : [el('caption', { class: 'muted' }, `No presents recorded for ${giftYear}.`)]));
+
+    const q = $('#gift-search').value.trim().toLowerCase();
+    const people = gifts.people.filter((p) => !q || p.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    $('#gift-people').replaceChildren(...people.map(personCard));
+    $('#gift-people-empty').hidden = gifts.people.length > 0;
+  }
+
+  function renderGiftsEverywhere() {
+    renderGifts();
+    renderDashGifts();
+  }
+
+  $('#gift-year-prev').addEventListener('click', () => { giftYear--; renderGifts(); });
+  $('#gift-year-next').addEventListener('click', () => { giftYear++; renderGifts(); });
+  $('#gift-search').addEventListener('input', renderGifts);
+  $('#add-person-btn').addEventListener('click', () => openPersonDialog(null));
+  $('#dash-gifts-open').addEventListener('click', () => showTab('gifts'));
+
+  // Person dialog
+  const personDialog = $('#gperson-dialog');
+  $('#gperson-month').replaceChildren(el('option', { value: '' }, '—'), ...MONTHS.map((m, i) => el('option', { value: String(i + 1) }, m)));
+
+  function openPersonDialog(person) {
+    $('#gperson-dialog-title').textContent = person ? 'Edit person' : 'Add person';
+    $('#gperson-id').value = person?.id ?? '';
+    $('#gperson-name').value = person?.name ?? '';
+    $('#gperson-day').value = person?.bday?.day ?? '';
+    $('#gperson-month').value = person?.bday ? String(person.bday.month) : '';
+    $('#gperson-year').value = person?.bday?.year ?? '';
+    $('#gperson-christmas').checked = person ? person.christmas !== false : true;
+    $('#gperson-budget').value = person?.budget ?? '';
+    $('#gperson-notes').value = person?.notes ?? '';
+    $('#gperson-delete').hidden = !person;
+    personDialog.showModal();
+    $('#gperson-name').focus();
+  }
+
+  $('#gperson-form').addEventListener('submit', (e) => {
+    const day = parseInt($('#gperson-day').value, 10);
+    const month = parseInt($('#gperson-month').value, 10);
+    const year = parseInt($('#gperson-year').value, 10);
+    if ((day || month) && !(day >= 1 && month >= 1 && day <= new Date(2000, month, 0).getDate())) {
+      e.preventDefault();
+      alert('Please give a day and month that exist, or leave both blank.');
+      return;
+    }
+    const budget = parseFloat($('#gperson-budget').value);
+    const fields = {
+      name: $('#gperson-name').value.trim(),
+      bday: day && month ? { day, month, ...(year > 1900 ? { year } : {}) } : null,
+      christmas: $('#gperson-christmas').checked,
+      budget: budget > 0 ? budget : null,
+      notes: $('#gperson-notes').value.trim(),
+    };
+    if (!fields.name) return;
+    const id = $('#gperson-id').value;
+    if (id) Object.assign(gifts.people.find((p) => p.id === id), fields);
+    else gifts.people.push({ id: uid(), ...fields });
+    saveGifts();
+    renderGiftsEverywhere();
+  });
+
+  $('#gperson-delete').addEventListener('click', () => {
+    const id = $('#gperson-id').value;
+    const person = gifts.people.find((p) => p.id === id);
+    if (!person) return;
+    const count = gifts.gifts.filter((g) => g.personId === id).length;
+    if (!confirm(count ? `Delete ${person.name} and the ${count} present${count === 1 ? '' : 's'} recorded for them?` : `Delete ${person.name}?`)) return;
+    gifts.people = gifts.people.filter((p) => p.id !== id);
+    gifts.gifts = gifts.gifts.filter((g) => g.personId !== id);
+    saveGifts();
+    renderGiftsEverywhere();
+    personDialog.close();
+  });
+
+  // Gift dialog
+  const giftDialog = $('#gift-dialog');
+
+  // What you've given someone before, so you don't give the same thing twice.
+  function showGiftHistory() {
+    const personId = $('#gift-person').value;
+    const editing = $('#gift-id').value;
+    const past = gifts.gifts.filter((g) => g.personId === personId && g.id !== editing)
+      .sort((a, b) => b.year - a.year).slice(0, 6);
+    $('#gift-history').hidden = !past.length;
+    $('#gift-history').textContent = past.length
+      ? `Before: ${past.map((g) => `${g.year} ${OCCASIONS[g.occasion].icon} ${g.what}${g.cost ? ` (${moneyText(g.cost)})` : ''}`).join(' · ')}`
+      : '';
+  }
+
+  // With no occasion given, pick whichever of the person's occasions comes round next.
+  function defaultOccasion(personId) {
+    const person = gifts.people.find((p) => p.id === personId);
+    const next = person && Object.keys(OCCASIONS).map((o) => nextOccasion(person, o)).filter(Boolean).sort((a, b) => a.days - b.days)[0];
+    return next ? [next.occasion, next.year] : ['christmas', today().getFullYear()];
+  }
+
+  function openGiftDialog(gift, personId, occasion, year) {
+    if (!gifts.people.length) {
+      alert('Add a person first.');
+      return;
+    }
+    $('#gift-dialog-title').textContent = gift ? 'Edit present' : 'Add present';
+    $('#gift-person').replaceChildren(...[...gifts.people].sort((a, b) => a.name.localeCompare(b.name))
+      .map((p) => el('option', { value: p.id }, p.name)));
+    $('#gift-id').value = gift?.id ?? '';
+    $('#gift-person').value = gift?.personId ?? personId ?? $('#gift-person').value;
+    const [defOcc, defYear] = defaultOccasion($('#gift-person').value);
+    $('#gift-occasion').value = gift?.occasion ?? occasion ?? defOcc;
+    $('#gift-year-input').value = gift?.year ?? year ?? defYear;
+    $('#gift-what').value = gift?.what ?? '';
+    $('#gift-cost').value = gift?.cost ?? '';
+    $('#gift-status').value = gift?.status ?? 'idea';
+    $('#gift-notes').value = gift?.notes ?? '';
+    $('#gift-delete').hidden = !gift;
+    showGiftHistory();
+    giftDialog.showModal();
+    $('#gift-what').focus();
+  }
+
+  $('#gift-person').addEventListener('change', showGiftHistory);
+
+  $('#gift-form').addEventListener('submit', () => {
+    const cost = parseFloat($('#gift-cost').value);
+    const fields = {
+      personId: $('#gift-person').value,
+      occasion: $('#gift-occasion').value,
+      year: parseInt($('#gift-year-input').value, 10) || today().getFullYear(),
+      what: $('#gift-what').value.trim(),
+      cost: cost > 0 ? Math.round(cost * 100) / 100 : 0,
+      status: $('#gift-status').value,
+      notes: $('#gift-notes').value.trim(),
+    };
+    if (!fields.what) return;
+    const id = $('#gift-id').value;
+    if (id) Object.assign(gifts.gifts.find((g) => g.id === id), fields);
+    else gifts.gifts.push({ id: uid(), ...fields });
+    saveGifts();
+    renderGiftsEverywhere();
+  });
+
+  $('#gift-delete').addEventListener('click', () => {
+    const id = $('#gift-id').value;
+    const gift = gifts.gifts.find((g) => g.id === id);
+    if (gift && confirm(`Delete ${gift.what}?`)) {
+      gifts.gifts = gifts.gifts.filter((g) => g.id !== id);
+      saveGifts();
+      renderGiftsEverywhere();
+      giftDialog.close();
+    }
+  });
+
   // ---------- Tabs ----------
 
-  const TABS = ['today', 'food', 'recipes', 'plan', 'shop'];
+  const TABS = ['today', 'food', 'recipes', 'plan', 'shop', 'gifts'];
 
   function showTab(name) {
     for (const tab of TABS) {
@@ -2297,7 +2656,7 @@ Method:
 
   // Export / import
   $('#export-btn').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ ...data, gifts }, null, 2)], { type: 'application/json' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `food-${new Date().toISOString().slice(0, 10)}.json` });
     a.click();
     URL.revokeObjectURL(a.href);
@@ -2314,8 +2673,11 @@ Method:
       if (!parsed.plan || typeof parsed.plan !== 'object') parsed.plan = {};
       if (!Array.isArray(parsed.members)) parsed.members = [];
       if (!Array.isArray(parsed.shopping)) parsed.shopping = [];
-      if (!confirm('Replace your current food list, recipes and meal plan with the imported ones?')) return;
+      const importedGifts = validGifts(parsed.gifts) ? parsed.gifts : null;
+      delete parsed.gifts;
+      if (!confirm(`Replace your current food list, recipes and meal plan${importedGifts ? ' and gift list' : ''} with the imported ones?`)) return;
       data = parsed;
+      if (importedGifts) { gifts = importedGifts; saveGifts(); }
       save();
       render();
     } catch (err) {
