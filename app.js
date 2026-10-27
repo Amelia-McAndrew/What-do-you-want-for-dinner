@@ -2323,6 +2323,240 @@ Method:
     }
   });
 
+  // ---------- Excel template ----------
+  //
+  // Download a blank food template (with dropdowns for places, types and date kinds) and
+  // upload a filled-in one, or a CSV, to add food in bulk.
+
+  const SHEET_COLUMNS = [
+    ['name', 'Food', 26],
+    ['place', "Where it's kept", 18],
+    ['qty', 'How much is left', 16],
+    ['unit', 'Unit', 10],
+    ['full', 'Full amount', 12],
+    ['expiry', 'Goes off', 13],
+    ['dateKind', 'Use by or best before', 20],
+    ['type', 'Type', 22],
+    ['notes', 'Notes', 30],
+  ];
+  const SHEET_UNITS = ['items', 'g', 'kg', 'ml', 'L', 'packs', 'tins', 'jars', 'portions', 'bags', 'bottles', 'slices'];
+
+  $('#sheet-btn').addEventListener('click', () => $('#sheet-dialog').showModal());
+
+  $('#sheet-template').addEventListener('click', () => {
+    const rows = 500;
+    const places = data.places.map((p) => p.name);
+    const types = FOOD_TYPES.map(([, , label]) => label);
+    const lists = [['Places', ...places], ['Use by or best before', 'Use by', 'Best before'], ['Types', ...types], ['Units', ...SHEET_UNITS]];
+    const listRows = Array.from({ length: Math.max(...lists.map((l) => l.length)) }, (_, r) =>
+      lists.map((l) => (r === 0 ? { v: l[r], s: 'header' } : l[r] ?? '')));
+    const col = (key) => String.fromCharCode(65 + SHEET_COLUMNS.findIndex(([k]) => k === key));
+    const range = (c, n) => `Lists!$${c}$2:$${c}$${n}`;
+    const help = [
+      [{ v: 'How to fill in the food template', s: 'title' }],
+      [],
+      ['1. Fill in one row per food on the Food sheet. Only the Food column is needed.'],
+      ["2. Where it's kept: pick a place from the list, or type a new one (e.g. Garage freezer) and it will be added."],
+      ['3. How much is left: a number, like 2 or 500. Put what it is in Unit (g, packs, tins…), or just write 500g.'],
+      ['4. Full amount (optional): how much there was to start with, so the app can show how much is left.'],
+      ['5. Goes off: the date on the packet, like 25/10/2026. Leave it empty for food that keeps.'],
+      ['6. Use by or best before: use by dates give warnings when they get close; best before ones don\'t.'],
+      ["   Leave it empty and it's picked from the type (meat, fish and dairy are use by)."],
+      ["7. Type: leave it empty and it's guessed from the name."],
+      ['8. Save, then in the app go to Food → 📊 Excel → Upload filled-in file.'],
+      [],
+      [{ v: 'Food that is already in the same place is updated, not added twice, so you can upload the same file again after changing it.', s: 'note' }],
+    ];
+    const blob = Spreadsheet.writeXlsx([
+      {
+        name: 'Food',
+        rows: [SHEET_COLUMNS.map(([, label]) => ({ v: label, s: 'header' }))],
+        widths: SHEET_COLUMNS.map(([, , w]) => w),
+        colStyles: SHEET_COLUMNS.map(([key]) => (key === 'expiry' ? 'date' : null)),
+        freeze: true,
+        lists: [
+          { col: col('place'), from: range('A', places.length + 1), rows },
+          { col: col('unit'), from: range('D', SHEET_UNITS.length + 1), rows },
+          { col: col('dateKind'), from: range('B', 3), rows },
+          { col: col('type'), from: range('C', types.length + 1), rows },
+        ],
+      },
+      { name: 'How to', rows: help, widths: [110] },
+      { name: 'Lists', rows: listRows, widths: [20, 22, 24, 12] },
+    ]);
+    const a = el('a', { href: URL.createObjectURL(blob), download: 'food-template.xlsx' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  });
+
+  // Which field a column heading means (headings can be worded loosely).
+  function sheetField(heading) {
+    const h = String(heading).toLowerCase().replace(/[^a-z]/g, '');
+    if (!h) return null;
+    if (/^(food|name|item|product|what)/.test(h)) return 'name';
+    if (/^(useby|best|datetype|datekind|kind)/.test(h)) return 'dateKind';
+    if (/^(full|total|startingamount|original)/.test(h)) return 'full';
+    if (/goesoff|expir|date|^off|^bb/.test(h)) return 'expiry';
+    if (/where|place|storage|location|kept|stored/.test(h)) return 'place';
+    if (/^unit/.test(h)) return 'unit';
+    if (/left|amount|qty|quantity|howmuch|count|number/.test(h)) return 'qty';
+    if (/type|category|aisle/.test(h)) return 'type';
+    if (/note|comment/.test(h)) return 'notes';
+    return null;
+  }
+
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+  // A spreadsheet date (a day number or text like 25/10/2026) as YYYY-MM-DD, '' if empty,
+  // or null if it can't be read. Dates with slashes are read the UK way round.
+  function sheetDate(value, date1904) {
+    const iso = (y, m, d) => {
+      if (y < 100) y += 2000;
+      const date = new Date(Date.UTC(y, m - 1, d));
+      if (date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d || y < 2000 || y > 2100) return null;
+      return date.toISOString().slice(0, 10);
+    };
+    if (typeof value === 'number') {
+      if (value < 30000 || value > 80000) return null;
+      const date = new Date(Date.UTC(1899, 11, 30) + (Math.floor(value) + (date1904 ? 1462 : 0)) * 86400000);
+      return date.toISOString().slice(0, 10);
+    }
+    const text = String(value).trim().toLowerCase();
+    if (!text) return '';
+    let m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return iso(+m[1], +m[2], +m[3]);
+    m = text.match(/^(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{2}|\d{4}))?$/);
+    if (m) return iso(m[3] ? +m[3] : new Date().getFullYear(), +m[2], +m[1]);
+    m = text.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s\-]+([a-z]{3})[a-z]*\.?,?[\s\-]*(\d{2}|\d{4})?$/);
+    if (m && MONTHS.includes(m[2])) return iso(m[3] ? +m[3] : new Date().getFullYear(), MONTHS.indexOf(m[2]) + 1, +m[1]);
+    return null;
+  }
+
+  function sheetType(value, name) {
+    const t = String(value).toLowerCase().trim();
+    if (t) {
+      const found = FOOD_TYPES.find(([id, icon, label]) => t === id || t.includes(icon) || label.toLowerCase().startsWith(t.replace(/^\W+/, '').trim())
+        || label.toLowerCase().split(/[,&]/).some((part) => part.trim() && t.includes(part.trim())));
+      if (found) return found[0];
+    }
+    return guessType(name);
+  }
+
+  function placeIconFor(name) {
+    const n = name.toLowerCase();
+    return /freez/.test(n) ? '🧊' : /fridge/.test(n) ? '🥶' : /cupboard|pantry|larder|shelf/.test(n) ? '🥫' : /wine|drink/.test(n) ? '🍷' : /fruit|veg/.test(n) ? '🧺' : '';
+  }
+
+  const placeKey = (name) => String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  $('#sheet-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    let table;
+    try {
+      table = await Spreadsheet.readTable(file, 'Food');
+    } catch (err) {
+      alert(err.message === 'old-xls'
+        ? 'That is an old-style .xls file. Save it as an Excel Workbook (.xlsx) and try again.'
+        : "That file couldn't be read. Upload the .xlsx template (or a .csv file).");
+      return;
+    }
+    // The heading row is the first one with a Food column.
+    const headerAt = table.rows.findIndex((row) => row.some((h) => sheetField(h) === 'name'));
+    if (headerAt < 0) {
+      alert("Couldn't find a Food column. Keep the heading row from the template, with Food in it.");
+      return;
+    }
+    const fields = table.rows[headerAt].map(sheetField);
+    const newPlaces = [];
+    const findPlace = (name) => [...data.places, ...newPlaces].find((p) => placeKey(p.name) === placeKey(name));
+    const adds = [];
+    const updates = [];
+    let skipped = 0;
+    let badDates = 0;
+    for (const row of table.rows.slice(headerAt + 1)) {
+      const cell = {};
+      fields.forEach((f, i) => { if (f && cell[f] == null) cell[f] = row[i] ?? ''; });
+      const text = (k) => String(cell[k] ?? '').trim();
+      if (!row.some((v) => String(v).trim())) continue;
+      const name = text('name').slice(0, 80);
+      if (!name) { skipped++; continue; }
+      const type = sheetType(cell.type ?? '', name);
+
+      let placeId;
+      const placeName = text('place').slice(0, 40);
+      if (placeName && placeKey(placeName)) {
+        let place = findPlace(placeName);
+        if (!place) {
+          place = { id: uid(), name: placeName, icon: placeIconFor(placeName) };
+          newPlaces.push(place);
+        }
+        placeId = place.id;
+      } else if (data.places.length) {
+        placeId = placeFor(type);
+      } else if (newPlaces.length) {
+        placeId = newPlaces[0].id;
+      }
+      if (!placeId) {
+        const fridge = { id: uid(), name: 'Fridge', icon: '🥶' };
+        newPlaces.push(fridge);
+        placeId = fridge.id;
+      }
+
+      let qty = 1;
+      let unit = text('unit').slice(0, 20);
+      const amount = cell.qty;
+      if (typeof amount === 'number') qty = Math.max(0, amount);
+      else if (text('qty')) {
+        const m = text('qty').replace(',', '.').match(/^(\d*\.?\d+)\s*(.*)$/);
+        if (m) {
+          qty = parseFloat(m[1]);
+          if (!unit) unit = m[2].trim().slice(0, 20);
+        }
+      }
+      const full = parseFloat(String(cell.full ?? '').replace(',', '.'));
+      let expiry = sheetDate(cell.expiry ?? '', table.date1904);
+      if (expiry === null) { badDates++; expiry = ''; }
+      const kind = text('dateKind').toLowerCase();
+      const fieldsFor = {
+        name,
+        type,
+        placeId,
+        expiry: expiry || null,
+        dateKind: /best/.test(kind) ? 'best' : /use/.test(kind) ? 'useby' : defaultDateKind(type),
+        qty: Math.round(qty * 1000) / 1000,
+        unit,
+        full: full > 0 ? full : null,
+        notes: text('notes').slice(0, 200),
+      };
+      const existing = data.items.find((i) => i.placeId === placeId && i.name.trim().toLowerCase() === name.toLowerCase());
+      if (existing) updates.push([existing, fieldsFor]);
+      else adds.push(fieldsFor);
+    }
+    if (!adds.length && !updates.length) {
+      alert('There was no food in that file. Fill in at least the Food column, one row per food.');
+      return;
+    }
+    const what = [adds.length && `add ${adds.length} food${adds.length === 1 ? '' : 's'}`, updates.length && `update ${updates.length} already in the app`].filter(Boolean).join(' and ');
+    const counts = new Map();
+    for (const f of [...adds, ...updates.map(([, f]) => f)]) counts.set(f.placeId, (counts.get(f.placeId) || 0) + 1);
+    const summary = [...counts].map(([id, n]) => `${(data.places.find((p) => p.id === id) || newPlaces.find((p) => p.id === id)).name}: ${n}`).join(', ');
+    let message = `This will ${what} (${summary}).`;
+    if (newPlaces.length) message += `\n\nNew storage places: ${newPlaces.map((p) => p.name).join(', ')}.`;
+    if (badDates) message += `\n\n${badDates} date${badDates === 1 ? '' : 's'} couldn't be read, so ${badDates === 1 ? 'that food goes' : 'those foods go'} in without a date. Use a date like 25/10/2026.`;
+    if (skipped) message += `\n\n${skipped} row${skipped === 1 ? ' has' : 's have'} no food name and will be skipped.`;
+    if (!confirm(message)) return;
+    data.places.push(...newPlaces);
+    for (const [item, f] of updates) Object.assign(item, f);
+    for (const f of adds) data.items.push({ id: uid(), addedBy: myId(), ...f });
+    save();
+    render();
+    $('#sheet-dialog').close();
+  });
+
   // ---------- Profiles ----------
   //
   // Everyone in the household has a profile (name, photo) in data.members. Which profile is

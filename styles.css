@@ -791,3 +791,6 @@ dialog.drawer[open] { display: flex; animation: drawer-in 0.22s ease-out; }
 .device-meta { font-size: 0.8rem; }
 .device-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .owner-tag { background: var(--warn-bg); color: var(--warn); }
+
+.sheet-steps { display: grid; gap: 10px; padding-left: 1.4em; margin: 0 0 12px; }
+.sheet-steps .btn { width: 100%; justify-content: center; }

@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=29">
+  <link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body>
   <header class="site-header">
@@ -110,6 +110,7 @@
         </select>
       </div>
       <div class="toolbar-group">
+        <button type="button" id="sheet-btn" class="btn">📊 Excel</button>
         <button type="button" id="add-place-btn" class="btn">+ Storage place</button>
         <button type="button" id="add-item-btn" class="btn btn-primary">+ Add food</button>
       </div>
@@ -641,6 +642,22 @@
     </form>
   </dialog>
 
+  <dialog id="sheet-dialog">
+    <form method="dialog">
+      <h2>Fill in from Excel</h2>
+      <p>Download the template, fill in one row per food (a fridge full at a time is fine), then upload it here. Works with Excel, Google Sheets and Numbers.</p>
+      <ol class="sheet-steps">
+        <li><button type="button" class="btn" id="sheet-template">⬇️ Download blank template</button></li>
+        <li><label class="btn btn-primary">⬆️ Upload filled-in file<input type="file" id="sheet-file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden></label></li>
+      </ol>
+      <p class="muted">Only the Food column is needed. Places that don't exist yet (like "Garage freezer") are added for you, food that's already in the same place is updated instead of added twice, and anything left blank is filled in the same way as when you add food here.</p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="load-error" class="load-error" role="alert" hidden></div>
   <script>
     // If anything goes wrong while the app starts, say so on screen instead of failing silently.
@@ -650,8 +667,9 @@
       box.hidden = false;
     });
   </script>
-  <script src="avatars.js?v=29"></script>
-  <script src="firebase-config.js?v=29"></script>
-  <script src="app.js?v=29"></script>
+  <script src="avatars.js?v=30"></script>
+  <script src="firebase-config.js?v=30"></script>
+  <script src="spreadsheet.js?v=30"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>
